@@ -1,0 +1,73 @@
+# 8Bit Daily Puzzle - local + single-VM stack.
+#
+# Two common ways to use this:
+#   1. Data stores only (recommended for backend dev):
+#        docker compose up -d postgres redis
+#      then run the backend with `mvn spring-boot:run` from services/api.
+#   2. Whole backend (closest to the Oracle VM deploy):
+#        docker compose up -d --build
+#
+# The React frontend runs separately (Vercel / Cloudflare Pages, or `npm run dev`).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: eightbit
+      POSTGRES_USER: eightbit
+      # Local-only: trust auth means no password for this throwaway dev DB, so there is no
+      # credential to commit. NEVER use trust for a database exposed beyond localhost.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      # Host 5433 -> container 5432, so this does NOT clash with a Postgres already on the
+      # host's 5432 (e.g. a local Supabase / system Postgres). The `api` container still talks
+      # to it on the internal 5432 via the service name.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eightbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ../services/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/eightbit
+      DB_USER: eightbit
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Set JWT_SECRET (>=32 bytes) for a stable signing key; if blank, the app mints an
+      # ephemeral one. Put real values in a gitignored infra/.env (see infra/.env.example).
+      JWT_SECRET: ${JWT_SECRET:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # Optional web push (leave blank to disable):
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

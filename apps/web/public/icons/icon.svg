@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" shape-rendering="crispEdges">
+  <rect width="512" height="512" fill="#0f0f14"/>
+  <!-- pixel border -->
+  <rect x="32" y="32" width="448" height="448" fill="none" stroke="#3a3a44" stroke-width="16"/>
+  <!-- green tile -->
+  <rect x="80" y="96"  width="96" height="96" fill="#3aa655"/>
+  <!-- yellow tile -->
+  <rect x="208" y="96"  width="96" height="96" fill="#c9b458"/>
+  <!-- grey tile -->
+  <rect x="336" y="96"  width="96" height="96" fill="#3a3a44"/>
+  <!-- "8B" pixel text block -->
+  <g fill="#e8e8ec" font-family="monospace" font-weight="700">
+    <text x="256" y="360" font-size="180" text-anchor="middle" dominant-baseline="middle">8B</text>
+  </g>
+</svg>

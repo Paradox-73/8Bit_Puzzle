@@ -1,0 +1,89 @@
+server:
+  port: 8080
+  # Behind Cloudflare Tunnel in production; tell Spring to trust forwarded headers.
+  forward-headers-strategy: framework
+  tomcat:
+    threads:
+      # 200 worker threads is plenty for ~1000 concurrent students making cheap,
+      # bursty guess requests. See README "Scalability" section.
+      max: 200
+      min-spare: 20
+
+spring:
+  application:
+    name: 8bit-api
+  datasource:
+    # Default targets the docker-compose published port 5433 (kept off 5432 to avoid clashing
+    # with a local Supabase / system Postgres). The api container overrides DB_URL to use the
+    # internal 5432. Set DB_URL for Neon/production.
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/eightbit}
+    username: ${DB_USER:eightbit}
+    # No password by default: the local docker-compose Postgres uses trust auth. Set DB_PASSWORD
+    # for any real database (Neon/managed Postgres).
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: 5
+  jpa:
+    hibernate:
+      # 'update' keeps dev friction low. For production switch to 'validate' and
+      # manage schema with the SQL in the build doc / a migration tool.
+      ddl-auto: ${JPA_DDL:update}
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  jwt:
+    # No secret committed. If unset, the app mints an EPHEMERAL key at startup (dev only).
+    # Production MUST set JWT_SECRET to a stable value of >= 32 bytes.
+    secret: ${JWT_SECRET:}
+    access-token-ttl-minutes: ${JWT_TTL_MINUTES:720}   # 12h for v1; shorten + add refresh later
+  cors:
+    # Comma-separated allowed origin patterns. "*" is fine because we authenticate with
+    # a Bearer token in a header (no cookies), so there is no CSRF surface to protect.
+    allowed-origins: ${CORS_ORIGINS:*}
+  vapid:
+    # Generate a key pair (see README). Leave blank to disable push without errors.
+    public-key: ${VAPID_PUBLIC_KEY:}
+    private-key: ${VAPID_PRIVATE_KEY:}
+    subject: ${VAPID_SUBJECT:mailto:8bit@iiitb.ac.in}
+  content:
+    # Editors must keep at least this many days of puzzles queued per game.
+    buffer-warn-below-days: 14
+
+rollnumber:
+  # Confirm the exact IIITB scheme before launch; this is config-driven so no redeploy needed.
+  pattern: "^(IMT|MT|MS|PH|DT)(\\d{4})(\\d{3,4})$"
+  program-map:
+    IMT: iMTech
+    MT: MTech
+    MS: MSc
+    PH: PhD
+    DT: Dual
+
+logging:
+  level:
+    com.eightbit: INFO

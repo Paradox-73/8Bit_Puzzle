@@ -1,0 +1,18 @@
+# Cloudflare Tunnel config (copy to config.yml on the Oracle VM).
+# Gives you an HTTPS hostname pointing at the backend with NO open ports, NO static IP,
+# NO manual certs, and the origin IP stays hidden (build doc section 3 / 15).
+#
+# Setup on the VM:
+#   1. Install cloudflared, then: cloudflared tunnel login
+#   2. cloudflared tunnel create 8bit-api          # note the tunnel UUID + creds file
+#   3. cloudflared tunnel route dns 8bit-api api.your-domain.in
+#   4. Fill in below, then: cloudflared tunnel run 8bit-api
+#      (or install as a service: cloudflared service install)
+
+tunnel: <YOUR_TUNNEL_UUID>
+credentials-file: /root/.cloudflared/<YOUR_TUNNEL_UUID>.json
+
+ingress:
+  - hostname: api.your-domain.in
+    service: http://localhost:8080
+  - service: http_status:404

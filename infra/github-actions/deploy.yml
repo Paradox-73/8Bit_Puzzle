@@ -1,0 +1,50 @@
+# Move this file to .github/workflows/deploy.yml at the repo root to activate it.
+# Builds the backend image, pushes to GitHub Container Registry (ghcr.io, free for public
+# images), then SSHes into the Oracle VM, pulls, and restarts the compose stack.
+#
+# Repo secrets required:
+#   VM_HOST, VM_USER, VM_SSH_KEY   (the Oracle VM's address, user, and a private key)
+# The frontend deploys itself via Vercel/Cloudflare Pages on push -- not handled here.
+
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/api/**"
+      - ".github/workflows/deploy.yml"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./services/api
+          push: true
+          tags: ghcr.io/${{ github.repository }}/api:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/8bit/infra
+            docker compose pull api
+            docker compose up -d api

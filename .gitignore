@@ -1,0 +1,41 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.local
+services/api/src/main/resources/application-local.yml
+infra/cloudflared/config.yml
+infra/cloudflared/*.json
+# key material — never commit
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+vapid*.json
+
+# scratch
+err.txt
+apps/web/dev-dist/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
