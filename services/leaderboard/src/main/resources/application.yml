@@ -1,0 +1,35 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: 8bit-leaderboard
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  # Must match the api's JWT_SECRET so this service can identify the caller for "me"/batch scope.
+  jwt:
+    secret: ${JWT_SECRET:}
+  stream:
+    key: ${STREAM_KEY:stream:puzzle-completed}
+    group: ${STREAM_GROUP:leaderboard}
+    consumer: ${STREAM_CONSUMER:lb-1}
+
+logging:
+  level:
+    com.eightbit: INFO

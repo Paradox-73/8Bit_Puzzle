@@ -44,8 +44,8 @@ export function AuthProvider({ children }) {
   );
 
   const register = useCallback(
-    async ({ rollNumber, username, password }) => {
-      const data = await api.register({ rollNumber, username, password });
+    async ({ rollNumber, username, email, password }) => {
+      const data = await api.register({ rollNumber, username, email, password });
       applyAuth(data.accessToken, data.user);
       return data.user;
     },

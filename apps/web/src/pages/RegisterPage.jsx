@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -10,6 +11,7 @@ export default function RegisterPage() {
 
   const [rollNumber, setRollNumber] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -21,6 +23,7 @@ export default function RegisterPage() {
       await register({
         rollNumber: rollNumber.trim(),
         username: username.trim(),
+        email: email.trim(),
         password,
       });
       navigate('/', { replace: true });
@@ -33,6 +36,7 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle--corner" />
       <div className="auth-card">
         <h1 className="logo">
           <span className="logo__bit">8</span>BIT
@@ -57,6 +61,18 @@ export default function RegisterPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="nickname"
+              required
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">Email</span>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@iiitb.ac.in"
               required
             />
           </label>

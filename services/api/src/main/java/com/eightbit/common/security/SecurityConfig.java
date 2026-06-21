@@ -43,10 +43,13 @@ public class SecurityConfig {
                     (req, res, ex) -> res.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED)))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/auth/**",
+                    "/auth/register",
+                    "/auth/login",
+                    // /auth/verify-otp and /auth/resend-otp require a logged-in user (fall through)
                     "/push/vapid-public-key",
-                    "/actuator/health/**",
-                    "/actuator/info"
+                    // Only health/info/metrics/prometheus are exposed (see application.yml). Scraped
+                    // internally by Prometheus; the public gateway blocks /actuator (see nginx.conf).
+                    "/actuator/**"
                 ).permitAll()
                 // Public read-only profiles and leaderboards keep the home screen lively pre-login.
                 .requestMatchers(HttpMethod.GET, "/leaderboard/**", "/users/**").permitAll()

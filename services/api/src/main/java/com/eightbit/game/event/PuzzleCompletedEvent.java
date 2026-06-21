@@ -15,5 +15,6 @@ public record PuzzleCompletedEvent(
         long puzzleId,
         LocalDate puzzleDate,
         int score,
-        boolean solved
+        boolean solved,
+        boolean verified
 ) {}

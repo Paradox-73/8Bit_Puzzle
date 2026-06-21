@@ -9,4 +9,5 @@ public interface AttemptRepository extends JpaRepository<Attempt, Long> {
     Optional<Attempt> findByUserIdAndPuzzleId(Long userId, Long puzzleId);
     long countByPuzzleIdAndSolvedTrue(Long puzzleId);
     List<Attempt> findTop50ByUserIdOrderByFinishedAtDesc(Long userId);
+    List<Attempt> findTop100ByFlaggedTrueOrderByFinishedAtDesc();
 }

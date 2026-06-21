@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import BatchWarBar from '../components/BatchWarBar.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
+import VerifyEmailBanner from '../components/VerifyEmailBanner.jsx';
 
 const STATUS_CTA = {
   NOT_STARTED: 'Play today’s puzzle',
@@ -84,8 +86,13 @@ export default function HomePage() {
         <h1 className="logo logo--sm">
           <span className="logo__bit">8</span>BIT
         </h1>
-        <span className="home-hello">Hi, {user?.username || 'player'}</span>
+        <div className="home-header__right">
+          <span className="home-hello">Hi, {user?.username || 'player'}</span>
+          <ThemeToggle />
+        </div>
       </header>
+
+      <VerifyEmailBanner />
 
       <div className="segmented" role="tablist" aria-label="Choose game">
         {GAMES.map((g) => (
@@ -104,6 +111,9 @@ export default function HomePage() {
       <BatchWarBar data={batchWar} />
 
       <section className="hero">
+        <div className="hero__coin pixel" aria-hidden="true">
+          8B
+        </div>
         <div className="hero__badge">{today?.date || 'Today'}</div>
         <h2 className="hero__title">{TITLES[game]}</h2>
 
@@ -111,7 +121,11 @@ export default function HomePage() {
           <p className="hero__meta">Loading…</p>
         ) : noPuzzle ? (
           <>
-            <p className="hero__meta">No {TITLES[game]} puzzle today.</p>
+            <p className="hero__meta">
+              {game === 'wordle'
+                ? 'No Wordle puzzle today — check back tomorrow.'
+                : 'No Connections puzzle today — play Wordle instead.'}
+            </p>
             {game !== 'wordle' && (
               <Link className="btn btn--primary btn--block btn--lg" to="/play">
                 Play Wordle instead

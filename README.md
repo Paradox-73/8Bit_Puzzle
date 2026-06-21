@@ -67,23 +67,29 @@ Only unavoidable cost: an optional domain (~₹700–1,200/yr).
 │       └── vite.config.js       PWA manifest + offline caching for today's puzzle
 │
 ├── services/
-│   └── api/                     Spring Boot modular monolith
-│       └── src/main/java/com/eightbit/
-│           ├── auth/            roll-number login, JWT, batch extraction
-│           ├── game/            puzzle-of-the-day, server-side guess validation, scoring
-│           │   └── wordle/      WordleEngine (rules + scoring), WordList
-│           ├── leaderboard/     Redis sorted sets, batch-war, PuzzleCompleted listener
-│           ├── profile/         streaks, titles, stats
-│           ├── admin/           editor CMS: CRUD, review workflow, calendar + gap warnings
-│           ├── notification/    Web Push (VAPID) subscriptions + daily reminder job
-│           ├── common/          security, config, error handling
-│           └── bootstrap/       DataSeeder (demo data on first boot)
+│   ├── api/                     Spring Boot game service (modular monolith)
+│   │   └── src/main/java/com/eightbit/
+│   │       ├── auth/            roll-number login, JWT, batch extraction
+│   │       ├── game/            puzzle-of-the-day, server-side validation, scoring
+│   │       │   ├── wordle/      WordleEngine (rules + scoring), WordList
+│   │       │   └── play/        GamePlay strategy: WordlePlay, ConnectionsPlay
+│   │       ├── leaderboard/     in-process board + sink/ (inprocess | Redis-stream)
+│   │       ├── profile/         streaks, titles, stats
+│   │       ├── admin/           editor CMS + review workflow + /admin/flagged audit
+│   │       ├── notification/    Web Push (VAPID) + daily reminder job
+│   │       ├── common/          security, config, rate limiting, error handling
+│   │       └── bootstrap/       DataSeeder (demo data on first boot)
+│   └── leaderboard/             extracted leaderboard microservice (Phase 6)
+│       └── src/main/java/com/eightbit/lb/   Redis Stream consumer + read API (no DB)
 │
 ├── infra/
-│   ├── docker-compose.yml       Postgres + Redis + api
-│   ├── cloudflared/             Cloudflare Tunnel sample config
-│   ├── github-actions/          CI/CD workflow
-│   └── loadtest/midnight-spike.js   k6 test ramping to 1000 concurrent users
+│   ├── docker-compose.yml              Postgres + Redis + api (monolith dev)
+│   ├── docker-compose.microservices.yml gateway + api + leaderboard + Prometheus + Grafana
+│   ├── gateway/nginx.conf              routes /leaderboard* → leaderboard, rest → api
+│   ├── monitoring/                     prometheus.yml + Grafana provisioning + dashboard
+│   ├── cloudflared/                    Cloudflare Tunnel sample config
+│   ├── github-actions/                 CI/CD workflow
+│   └── loadtest/midnight-spike.js      k6 test ramping to 1000 concurrent users
 │
 ├── 8Bit-Puzzle-Build-Doc.md     full design rationale
 └── README.md
@@ -109,14 +115,31 @@ Player solves ──HTTP──▶ Game module ──"saved!"──▶ Player (in
 ```
 
 The player never waits on ranking maths, and at 11:59 PM when everyone submits at once the work
-queues harmlessly. Because the seam already exists, turning the leaderboard into its own deployable
-over Redis Streams / RabbitMQ (Phase 6) is a small change, not a rewrite — a genuine, honest
-event-driven microservices story rather than five JVMs fighting over 12 GB of RAM.
+queues harmlessly.
+
+**That seam is now actually extracted (Phase 6).** A `LeaderboardSink` chooses, by the single
+property `app.leaderboard.sink`, whether that event is handled in-process (monolith, default) or
+**XADD'd to a Redis Stream** consumed by a standalone `leaderboard` service via a consumer group:
+
+```
+                                          app.leaderboard.sink = stream
+Player ─▶ Gateway ─▶ Game service ──XADD──▶ Redis Stream ──consumer group──▶ Leaderboard service
+            │                                                                    │ ZADD
+            └────────── /leaderboard* ───────────────────────────────────────▶ ─┘  Redis Sorted Sets
+```
+
+The consumer group makes the midnight burst durable: if the leaderboard service is briefly swamped
+or restarts, un-acked messages are redelivered and it catches up — nothing is lost. The leaderboard
+service has **no database**; display names ride along in the event and live in a Redis hash. Two
+tuned JVMs (`-Xmx512m` + `-Xmx384m`) fit Oracle's 12 GB box — a genuine event-driven microservices
+story, not five JVMs fighting over RAM. Flip the property back and it's a single deployable again.
 
 **Anti-cheat is core:** the answer never reaches the browser. Each guess is validated server-side
-(`POST /puzzles/{id}/guess` returns only the green/yellow/grey pattern), scoring is computed on the
+(`POST /puzzles/{id}/guess` returns only the pattern / group result), scoring is computed on the
 server from validated moves, `UNIQUE(user_id, puzzle_id)` blocks replays, and a min-participant
-floor keeps the batch-war fair.
+floor keeps the batch-war fair. Phase 7 adds a **Redis rate limiter** on the guess endpoint (→ 429
+for scripts) and an **audit flag** for impossibly fast solves, reviewable by editors at
+`GET /admin/flagged`.
 
 ---
 
@@ -176,7 +199,29 @@ npm run dev                 # → http://localhost:5173
 ```
 
 Register with any IIITB-style roll number (e.g. `IMT2023045`, `MT2024012`). Log in as the editor to
-reach `/admin`.
+reach `/admin`. Two games are seeded: **Wordle** (`/play`) and **Connections** (`/play?game=connections`).
+
+---
+
+## Microservices deployment (Phase 6 + 7)
+
+Runs the full event-driven stack — nginx gateway, game `api` (publishing to a Redis Stream), the
+extracted `leaderboard` service, plus **Prometheus + Grafana**. A shared `JWT_SECRET` is required so
+both services validate the same tokens.
+
+```bat
+cd infra
+set JWT_SECRET=any-long-random-string-at-least-32-bytes-here
+set GATEWAY_PORT=8090
+docker compose -f docker-compose.microservices.yml -p 8bitms up -d --build
+```
+- App (through the gateway): `http://localhost:8090` → point the frontend's `VITE_API_BASE` here.
+  Leaderboard calls are routed to the leaderboard service automatically by nginx.
+- **Grafana:** `http://localhost:3001` (anonymous viewer; "8Bit Overview" dashboard pre-provisioned).
+- **Prometheus:** `http://localhost:9090`.
+
+Postgres/Redis stay internal here, so this never clashes with the dev stack. Tear down with
+`docker compose -f docker-compose.microservices.yml -p 8bitms down -v`.
 
 ---
 
@@ -250,19 +295,23 @@ exactly when you'd extract the leaderboard service (already seam-ready) and move
 
 ## Roadmap / what's left
 
-**Done (Phases 1–5):** Wordle, auth + batch parsing, streaks/profile, Redis leaderboard + batch-war,
-editor CMS + review workflow + evergreen failsafe, Web Push plumbing, PWA, ₹0 deploy configs.
+**Done (Phases 1–7):**
+- [x] **1–3** — Wordle, roll-number/JWT auth + batch parsing, streaks/profile, Redis leaderboard + batch-war.
+- [x] **4** — editor CMS, two-reviewer workflow, calendar + gap warnings, evergreen failsafe.
+- [x] **5** — Web Push (VAPID) plumbing, PWA, offline-for-today, ₹0 deploy configs.
+- [x] **6** — leaderboard extracted into its own service over a **Redis Stream** (consumer group);
+      **game #2 Connections** shipped (GamePlay strategy); **easter eggs** wired.
+- [x] **7** — **rate limiting** (Redis fixed-window → 429), **anti-cheat audit** (flagged fast solves,
+      `/admin/flagged`), **Prometheus + Grafana**, k6 midnight-spike load test.
 
-**Next:**
+**Still open (deliberately):**
 - [ ] **Refresh-token rotation** — currently a single 12h access token; add short-lived access +
       rotating refresh before opening campus-wide.
 - [ ] **College-email OTP** — `email_verified` is modelled but not wired; needed to stop fake-account
       batch stuffing before any prize round.
 - [ ] **Service-worker push display handler** — subscription + server send are done; add the SW
       `push` event handler (vite-plugin-pwa `injectManifest`) to render received notifications.
-- [ ] **Phase 6** — extract the leaderboard into its own service over Redis Streams; ship game #2
-      (Connections / Pixel Reveal / Cipher — content schema already supports them).
-- [ ] **Phase 7** — rate limiting, audit log for suspicious solves, Actuator + Prometheus/Grafana.
+- [ ] **More games** — Pixel Reveal / Cipher (content schema + GamePlay interface already support them).
 
 ---
 

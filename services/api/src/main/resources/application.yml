@@ -54,6 +54,10 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # Don't probe SMTP in the health check — OTP email is optional and may be unconfigured.
+    mail:
+      enabled: false
 
 app:
   jwt:
@@ -73,6 +77,24 @@ app:
   content:
     # Editors must keep at least this many days of puzzles queued per game.
     buffer-warn-below-days: 14
+  otp:
+    # OFF by default so dev needs no email server. Turn on for launch to require @iiitb.ac.in
+    # verification before an account counts toward batch scores.
+    enabled: ${OTP_ENABLED:false}
+    ttl-minutes: ${OTP_TTL_MINUTES:10}
+    email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
+    from-address: ${OTP_FROM:8bit@iiitb.ac.in}
+
+# SMTP is optional: if spring.mail.host is unset, OTP codes are written to the logs instead of
+# emailed (fine for dev). For launch, point these at a free Brevo/Resend SMTP relay via env.
+spring.mail:
+  host: ${MAIL_HOST:}
+  port: ${MAIL_PORT:587}
+  username: ${MAIL_USERNAME:}
+  password: ${MAIL_PASSWORD:}
+  properties:
+    mail.smtp.auth: ${MAIL_AUTH:true}
+    mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
 
 rollnumber:
   # Confirm the exact IIITB scheme before launch; this is config-driven so no redeploy needed.

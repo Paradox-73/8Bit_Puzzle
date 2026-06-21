@@ -133,6 +133,11 @@ export const api = {
   login: (payload) =>
     request('/auth/login', { method: 'POST', body: payload, auth: false }),
 
+  // EMAIL OTP VERIFICATION
+  verifyOtp: (code) =>
+    request('/auth/verify-otp', { method: 'POST', body: { code } }),
+  resendOtp: () => request('/auth/resend-otp', { method: 'POST' }),
+
   // GAME
   getToday: (type = 'wordle') => request('/puzzles/today', { query: { type } }),
   guess: (puzzleId, guess) =>

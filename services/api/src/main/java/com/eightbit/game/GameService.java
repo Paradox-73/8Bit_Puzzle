@@ -1,10 +1,12 @@
 package com.eightbit.game;
 
+import com.eightbit.auth.UserRepository;
+import com.eightbit.auth.User;
+import com.eightbit.common.ratelimit.RateLimiter;
 import com.eightbit.common.web.ApiException;
-import com.eightbit.game.dto.GameDtos.*;
+import com.eightbit.game.dto.GameDtos.AttemptSummary;
 import com.eightbit.game.event.PuzzleCompletedEvent;
-import com.eightbit.game.wordle.WordList;
-import com.eightbit.game.wordle.WordleEngine;
+import com.eightbit.game.play.GamePlay;
 import com.eightbit.profile.StatsService;
 import com.eightbit.profile.UserStats;
 import org.springframework.context.ApplicationEventPublisher;
@@ -17,7 +19,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class GameService {
@@ -25,20 +29,28 @@ public class GameService {
     /** The puzzle "day" rolls over at midnight IST for everyone. */
     public static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
 
+    private static final int GUESS_LIMIT = 30;
+    private static final Duration GUESS_WINDOW = Duration.ofSeconds(10);
+
     private final PuzzleRepository puzzles;
     private final AttemptRepository attempts;
-    private final WordleEngine engine;
-    private final WordList wordList;
+    private final Map<String, GamePlay> plays = new LinkedHashMap<>();
     private final StatsService statsService;
+    private final EasterEggService easterEggs;
+    private final RateLimiter rateLimiter;
+    private final UserRepository users;
     private final ApplicationEventPublisher events;
 
-    public GameService(PuzzleRepository puzzles, AttemptRepository attempts, WordleEngine engine,
-                       WordList wordList, StatsService statsService, ApplicationEventPublisher events) {
+    public GameService(PuzzleRepository puzzles, AttemptRepository attempts, List<GamePlay> playList,
+                       StatsService statsService, EasterEggService easterEggs, RateLimiter rateLimiter,
+                       UserRepository users, ApplicationEventPublisher events) {
         this.puzzles = puzzles;
         this.attempts = attempts;
-        this.engine = engine;
-        this.wordList = wordList;
+        playList.forEach(p -> plays.put(p.type(), p));
         this.statsService = statsService;
+        this.easterEggs = easterEggs;
+        this.rateLimiter = rateLimiter;
+        this.users = users;
         this.events = events;
     }
 
@@ -46,10 +58,13 @@ public class GameService {
         return LocalDate.now(ZONE);
     }
 
-    /**
-     * Resolves the puzzle to serve for {@code type} today: the scheduled one if present, otherwise
-     * a deterministic pick from the evergreen failsafe pool so the game is NEVER empty.
-     */
+    private GamePlay play(String type) {
+        GamePlay p = plays.get(type);
+        if (p == null) throw ApiException.badRequest("UNKNOWN_GAME", "Unknown game type: " + type);
+        return p;
+    }
+
+    /** Scheduled puzzle for today, else a deterministic pick from the evergreen failsafe pool. */
     @Transactional(readOnly = true)
     public Puzzle resolveTodayPuzzle(String type) {
         LocalDate date = today();
@@ -58,108 +73,115 @@ public class GameService {
             if (pool.isEmpty()) {
                 throw ApiException.notFound("NO_PUZZLE", "No puzzle available for today");
             }
-            // Stable for the whole day and identical for every player -> fair leaderboard.
             int idx = (int) Math.floorMod(date.toEpochDay(), pool.size());
             return pool.get(idx);
         });
     }
 
     @Transactional(readOnly = true)
-    public TodayResponse today(long userId, String type) {
+    public Map<String, Object> today(long userId, String type) {
         Puzzle p = resolveTodayPuzzle(type);
-        LocalDate playDate = today();
+        GamePlay gp = play(type);
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, p.getId()).orElse(null);
 
-        String answer = p.answer();
-        List<GuessRow> rows = new ArrayList<>();
-        String status = "NOT_STARTED";
-        Integer score = null;
-        String revealed = null;
-
-        if (attempt != null) {
-            for (String g : attempt.getGuesses()) {
-                rows.add(new GuessRow(g, engine.score(g, answer)));
-            }
-            if (attempt.isFinished()) {
-                status = Boolean.TRUE.equals(attempt.getSolved()) ? "SOLVED" : "FAILED";
-                score = attempt.getScore();
-                revealed = answer; // round is over -> safe to reveal
-            } else {
-                status = "IN_PROGRESS";
-            }
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("puzzleId", p.getId());
+        view.put("gameType", type);
+        view.put("date", today().toString());
+        view.put("difficulty", p.getDifficulty());
+        view.putAll(gp.todayView(p, attempt));
+        view.put("status", status(attempt));
+        if (attempt != null && attempt.isFinished()) {
+            view.put("score", attempt.getScore());
+            view.putAll(gp.reveal(p, attempt));
+        } else {
+            view.put("score", null);
         }
-
-        return new TodayResponse(
-                p.getId(), type, playDate, p.getDifficulty(),
-                new Config(WordleEngine.MAX_GUESSES, WordleEngine.WORD_LENGTH),
-                status, rows, score, revealed);
+        return view;
     }
 
     @Transactional
-    public GuessResponse guess(long userId, String username, int batchYear, long puzzleId, String rawGuess) {
+    public Map<String, Object> guess(long userId, String username, int batchYear, long puzzleId,
+                                     Map<String, Object> move) {
         Puzzle p = puzzles.findById(puzzleId)
                 .orElseThrow(() -> ApiException.notFound("NO_PUZZLE", "Puzzle not found"));
 
-        // Anti-cheat: you may only guess on today's resolved puzzle, not arbitrary past/future ones.
+        // Anti-cheat: you may only play today's resolved puzzle.
         Puzzle todayPuzzle = resolveTodayPuzzle(p.getGameType());
         if (!todayPuzzle.getId().equals(p.getId())) {
             throw ApiException.forbidden("NOT_TODAY", "That puzzle is not in play right now");
         }
 
+        GamePlay gp = play(p.getGameType());
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, puzzleId)
                 .orElseGet(() -> new Attempt(userId, puzzleId));
         if (attempt.isFinished()) {
             throw ApiException.conflict("ALREADY_FINISHED", "You've already finished today's puzzle");
         }
 
-        String guess = rawGuess == null ? "" : rawGuess.trim().toUpperCase();
-        if (guess.length() != WordleEngine.WORD_LENGTH) {
-            throw ApiException.badRequest("BAD_LENGTH", "Guess must be 5 letters");
-        }
-        if (!wordList.isAllowed(guess)) {
-            throw ApiException.badRequest("NOT_IN_WORD_LIST", "Not in word list");
+        // Rate limit guess submissions to stop scripts.
+        if (!rateLimiter.allow("guess:" + userId, GUESS_LIMIT, GUESS_WINDOW)) {
+            throw ApiException.tooManyRequests("RATE_LIMITED", "Slow down — too many requests");
         }
 
-        String answer = p.answer();
-        List<String> pattern = engine.score(guess, answer);
-        attempt.getGuesses().add(guess);
-        int guessesUsed = attempt.getGuesses().size();
-        boolean solved = engine.isSolved(pattern);
-        boolean gameOver = solved || guessesUsed >= WordleEngine.MAX_GUESSES;
+        GamePlay.MoveStep st = gp.step(p, attempt, move);
 
-        Integer score = null;
-        String revealed = null;
-        String shareGrid = null;
+        Map<String, Object> resp = new LinkedHashMap<>(st.response());
+        resp.put("solved", st.solved());
+        resp.put("gameOver", st.gameOver());
 
-        if (gameOver) {
+        if (st.gameOver()) {
             long ms = Math.max(0, Duration.between(attempt.getStartedAt(), Instant.now()).toMillis());
             int completionMs = (int) Math.min(Integer.MAX_VALUE, ms);
-            boolean firstSolver = solved && attempts.countByPuzzleIdAndSolvedTrue(puzzleId) == 0;
+            boolean firstSolver = st.solved() && attempts.countByPuzzleIdAndSolvedTrue(puzzleId) == 0;
             int solveHour = ZonedDateTime.now(ZONE).getHour();
 
-            UserStats stats = statsService.recordCompletion(userId, today(), solved, firstSolver, solveHour);
-            int computed = engine.score(solved, guessesUsed, completionMs, stats.getCurrentStreak());
-
-            attempt.setSolved(solved);
-            attempt.setScore(computed);
+            UserStats stats = statsService.recordCompletion(userId, today(), st.solved(), firstSolver, solveHour);
+            attempt.setSolved(st.solved());
             attempt.setCompletionMs(completionMs);
             attempt.setFinishedAt(Instant.now());
-            score = computed;
-            revealed = answer;
-            shareGrid = buildShareGrid(attempt, answer, solved);
+            int sc = gp.score(p, attempt, stats.getCurrentStreak());
+            attempt.setScore(sc);
+            applyAuditFlags(attempt, st.solved(), completionMs);
+
+            resp.put("score", sc);
+            resp.put("shareGrid", gp.shareGrid(p, attempt));
+            resp.putAll(gp.reveal(p, attempt));
         }
+
+        resp.put("status", status(attempt));
+
+        Map<String, Object> egg = easterEggs.eval(p, move, st.solved());
+        if (egg != null) resp.put("easterEgg", egg);
 
         attempts.save(attempt);
 
-        if (gameOver) {
-            // Delivered AFTER_COMMIT to the leaderboard listener -> the player never waits on ranking.
+        if (st.gameOver()) {
+            // Unverified accounts still appear on the campus board but don't count toward batch
+            // scores -- the anti-batch-stuffing rule (build doc section 6). Verified-by-default
+            // when OTP is off.
+            boolean verified = users.findById(userId).map(User::isEmailVerified).orElse(true);
             events.publishEvent(new PuzzleCompletedEvent(
-                    userId, username, batchYear, p.getGameType(), p.getId(), today(), score, solved));
+                    userId, username, batchYear, p.getGameType(), p.getId(), today(),
+                    attempt.getScore(), st.solved(), verified));
         }
+        return resp;
+    }
 
-        String status = !gameOver ? "IN_PROGRESS" : (solved ? "SOLVED" : "FAILED");
-        return new GuessResponse(guessesUsed, pattern, solved, gameOver, guessesUsed,
-                WordleEngine.MAX_GUESSES, status, score, revealed, shareGrid);
+    /** Flag finished attempts that look automated (build doc section 14). */
+    private void applyAuditFlags(Attempt a, boolean solved, int completionMs) {
+        if (!solved) return;
+        int moves = a.getGuesses().size();
+        if (completionMs < 1500 || (moves >= 3 && completionMs < 4000)) {
+            a.setFlagged(true);
+            a.setFlagReason("Solved in " + completionMs + "ms over " + moves + " moves");
+        }
+    }
+
+    private String status(Attempt a) {
+        if (a == null || a.getGuesses().isEmpty()) return "NOT_STARTED";
+        if (!a.isFinished()) return "IN_PROGRESS";
+        return Boolean.TRUE.equals(a.getSolved()) ? "SOLVED" : "FAILED";
     }
 
     @Transactional(readOnly = true)
@@ -174,22 +196,5 @@ public class GameService {
                     a.getSolved(), a.getScore(), a.getGuesses().size()));
         }
         return out;
-    }
-
-    private String buildShareGrid(Attempt attempt, String answer, boolean solved) {
-        StringBuilder sb = new StringBuilder();
-        String n = solved ? String.valueOf(attempt.getGuesses().size()) : "X";
-        sb.append("8Bit • IIITB • ").append(n).append("/").append(WordleEngine.MAX_GUESSES).append("\n");
-        for (String g : attempt.getGuesses()) {
-            for (String cell : engine.score(g, answer)) {
-                sb.append(switch (cell) {
-                    case WordleEngine.GREEN -> "🟩";  // 🟩
-                    case WordleEngine.YELLOW -> "🟨"; // 🟨
-                    default -> "⬛";                        // ⬛
-                });
-            }
-            sb.append("\n");
-        }
-        return sb.toString().trim();
     }
 }

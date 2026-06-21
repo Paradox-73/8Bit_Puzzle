@@ -40,25 +40,26 @@ public class LeaderboardService {
     private String batchStats(String type, LocalDate d) { return "lb:" + type + ":" + d + ":batchstats"; }
 
     /** Called by the leaderboard listener after a puzzle is completed. */
-    public void record(String type, LocalDate date, long userId, int batchYear, int score) {
+    public void record(String type, LocalDate date, long userId, int batchYear, int score, boolean verified) {
         String uid = String.valueOf(userId);
         var z = redis.opsForZSet();
 
-        // Daily boards: the player has exactly one attempt, so a plain ZADD is correct.
+        // Campus boards count everyone who played.
         z.add(dailyCampus(type, date), uid, score);
-        z.add(dailyBatch(type, date, batchYear), uid, score);
         redis.expire(dailyCampus(type, date), DAILY_TTL);
-        redis.expire(dailyBatch(type, date, batchYear), DAILY_TTL);
-
-        // All-time boards accumulate.
         z.incrementScore(allTimeCampus(type), uid, score);
-        z.incrementScore(allTimeBatch(type, batchYear), uid, score);
 
-        // Batch-war aggregates: O(1) running sum + count per batch.
-        var h = redis.opsForHash();
-        h.increment(batchStats(type, date), batchYear + ":sum", score);
-        h.increment(batchStats(type, date), batchYear + ":count", 1);
-        redis.expire(batchStats(type, date), DAILY_TTL);
+        // Batch boards + batch-war only count verified accounts (anti batch-stuffing).
+        if (verified) {
+            z.add(dailyBatch(type, date, batchYear), uid, score);
+            redis.expire(dailyBatch(type, date, batchYear), DAILY_TTL);
+            z.incrementScore(allTimeBatch(type, batchYear), uid, score);
+
+            var h = redis.opsForHash();
+            h.increment(batchStats(type, date), batchYear + ":sum", score);
+            h.increment(batchStats(type, date), batchYear + ":count", 1);
+            redis.expire(batchStats(type, date), DAILY_TTL);
+        }
     }
 
     public Map<String, Object> board(String type, String scope, String window, long userId, int callerBatch) {

@@ -33,6 +33,7 @@ public class ProfileController {
                         "rollNumber", u.getRollNumber(),
                         "batchYear", u.getBatchYear(),
                         "program", u.getProgram() == null ? "" : u.getProgram(),
+                        "emailVerified", u.isEmailVerified(),
                         "roles", u.roleList()
                 ),
                 "stats", statsView(s)

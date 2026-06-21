@@ -50,6 +50,13 @@ public class Attempt {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    /** Anti-cheat: set when a finished attempt looks suspicious (e.g. solved impossibly fast). */
+    @Column(nullable = false)
+    private boolean flagged = false;
+
+    @Column(name = "flag_reason", length = 200)
+    private String flagReason;
+
     protected Attempt() {}
 
     public Attempt(Long userId, Long puzzleId) {
@@ -76,4 +83,8 @@ public class Attempt {
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public Instant getFinishedAt() { return finishedAt; }
     public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
+    public boolean isFlagged() { return flagged; }
+    public void setFlagged(boolean flagged) { this.flagged = flagged; }
+    public String getFlagReason() { return flagReason; }
+    public void setFlagReason(String flagReason) { this.flagReason = flagReason; }
 }

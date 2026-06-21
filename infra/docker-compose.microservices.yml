@@ -1,0 +1,102 @@
+# Phase 6/7 deployment: the event-driven microservices stack.
+#
+#   gateway (nginx) ──► api (game)           ──XADD──► Redis Stream
+#                  └──► leaderboard service  ◄─consume─┘  ──► Redis Sorted Sets
+#   prometheus scrapes api + leaderboard ; grafana visualises.
+#
+# Run (JWT_SECRET MUST be set so both services validate the same tokens):
+#   cd infra
+#   set JWT_SECRET=some-long-random-string-at-least-32-bytes      (Windows cmd)
+#   docker compose -f docker-compose.microservices.yml -p 8bitms up -d --build
+#
+# Frontend: point VITE_API_BASE (and VITE_LEADERBOARD_BASE) at the gateway, e.g.
+#   http://localhost:${GATEWAY_PORT:-8080}
+#
+# Postgres/Redis are internal only (not published) so this never clashes with the dev stack.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: eightbit
+      POSTGRES_USER: eightbit
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eightbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ../services/api
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/eightbit
+      DB_USER: eightbit
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Publish completion events to the stream instead of writing leaderboards in-process.
+      APP_LEADERBOARD_SINK: stream
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (>=32 bytes) for the microservices stack}
+      SEED_EDITOR_PASSWORD: ${SEED_EDITOR_PASSWORD:-}
+    restart: unless-stopped
+
+  leaderboard:
+    build: ../services/leaderboard
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Same secret as the api so it can identify the caller for "my rank"/"my batch".
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (>=32 bytes) for the microservices stack}
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    depends_on: [api, leaderboard]
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    depends_on: [prometheus]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

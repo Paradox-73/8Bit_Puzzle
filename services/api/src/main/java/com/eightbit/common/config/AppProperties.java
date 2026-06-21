@@ -12,11 +12,13 @@ public class AppProperties {
     private final Cors cors = new Cors();
     private final Vapid vapid = new Vapid();
     private final Content content = new Content();
+    private final Otp otp = new Otp();
 
     public Jwt getJwt() { return jwt; }
     public Cors getCors() { return cors; }
     public Vapid getVapid() { return vapid; }
     public Content getContent() { return content; }
+    public Otp getOtp() { return otp; }
 
     public static class Jwt {
         private String secret;
@@ -56,5 +58,25 @@ public class AppProperties {
         private int bufferWarnBelowDays = 14;
         public int getBufferWarnBelowDays() { return bufferWarnBelowDays; }
         public void setBufferWarnBelowDays(int v) { this.bufferWarnBelowDays = v; }
+    }
+
+    public static class Otp {
+        /** When false (default), accounts are auto-verified so dev needs no email server. */
+        private boolean enabled = false;
+        private int ttlMinutes = 10;
+        private int length = 6;
+        private String emailDomain = "iiitb.ac.in";
+        private String fromAddress = "8bit@iiitb.ac.in";
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean v) { this.enabled = v; }
+        public int getTtlMinutes() { return ttlMinutes; }
+        public void setTtlMinutes(int v) { this.ttlMinutes = v; }
+        public int getLength() { return length; }
+        public void setLength(int v) { this.length = v; }
+        public String getEmailDomain() { return emailDomain; }
+        public void setEmailDomain(String v) { this.emailDomain = v; }
+        public String getFromAddress() { return fromAddress; }
+        public void setFromAddress(String v) { this.fromAddress = v; }
     }
 }

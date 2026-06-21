@@ -31,6 +31,9 @@ public class User {
     @Column(length = 10)
     private String program;
 
+    @Column(length = 120, unique = true)
+    private String email;
+
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
 
@@ -58,6 +61,8 @@ public class User {
     public void setBatchYear(Integer batchYear) { this.batchYear = batchYear; }
     public String getProgram() { return program; }
     public void setProgram(String program) { this.program = program; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
     public boolean isEmailVerified() { return emailVerified; }
     public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
     public String getRoles() { return roles; }

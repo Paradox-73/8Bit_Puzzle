@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
 import PushToggle from '../components/PushToggle.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 function StatBox({ label, value }) {
   return (
@@ -84,6 +85,17 @@ export default function ProfilePage() {
               </div>
             </section>
           )}
+
+          <section className="settings">
+            <h2 className="section-title">Appearance</h2>
+            <div className="push-row">
+              <div className="push-row__text">
+                <span>Theme</span>
+                <span className="push-row__sub">Switch between light and dark</span>
+              </div>
+              <ThemeToggle />
+            </div>
+          </section>
 
           <section className="settings">
             <h2 className="section-title">Notifications</h2>

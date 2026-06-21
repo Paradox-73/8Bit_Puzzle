@@ -89,7 +89,7 @@ public class DataSeeder implements CommandLineRunner {
     private void seedGameTypes() {
         if (gameTypes.count() > 0) return;
         gameTypes.save(new GameType("wordle", "Wordle", true));
-        gameTypes.save(new GameType("connections", "Connections", false));
+        gameTypes.save(new GameType("connections", "Connections", true));
         gameTypes.save(new GameType("pixel", "Pixel Reveal", false));
         gameTypes.save(new GameType("cipher", "Cipher / Decode", false));
         log.info("Seeded game types");
@@ -136,6 +136,15 @@ public class DataSeeder implements CommandLineRunner {
             p.setPublishDate(date);
             p.setDifficulty(difficultyFor(date));
             p.setContent(answer(word));
+            if (i == 0) {
+                // Demo easter egg: typing BYTES while solving today's Wordle pops a club message.
+                Map<String, Object> eggs = new HashMap<>();
+                eggs.put("triggers", List.of(Map.of(
+                        "match", "BYTES",
+                        "title", "🥚 8-bit secret",
+                        "body", "You typed the magic word. The 8Bit club salutes you!")));
+                p.setEasterEggs(eggs);
+            }
             p.setStatus(PuzzleStatus.SCHEDULED);
             p.setAuthorId(editorId);
             p.setReviewerId(editorId); // seed data only; real puzzles need a second reviewer
@@ -145,6 +154,8 @@ public class DataSeeder implements CommandLineRunner {
                 // unique (game_type, publish_date) -> already there, ignore
             }
         }
+
+        seedConnections(editorId, today);
 
         if (puzzles.findEvergreen("wordle").isEmpty()) {
             for (String w : EVERGREEN_WORDS) {
@@ -168,6 +179,50 @@ public class DataSeeder implements CommandLineRunner {
         Map<String, Object> m = new HashMap<>();
         m.put("answer", word);
         return m;
+    }
+
+    /** Two campus-themed Connections sets, alternated across the next week. */
+    private void seedConnections(Long editorId, LocalDate today) {
+        List<List<Map<String, Object>>> variants = List.of(
+                List.of(
+                        group(0, "Hostel life", "WIFI", "MESS", "LAUNDRY", "CURFEW"),
+                        group(1, "Things in code", "PYTHON", "JAVA", "DEBUG", "COMMIT"),
+                        group(2, "Spots on campus", "ATRIUM", "LIBRARY", "COURT", "GAZEBO"),
+                        group(3, "___ test", "UNIT", "STRESS", "BETA", "ACID")),
+                List.of(
+                        group(0, "Endsem energy", "PANIC", "CRAM", "REDBULL", "ALLNIGHT"),
+                        group(1, "8-bit things", "PIXEL", "SPRITE", "BYTE", "RETRO"),
+                        group(2, "Mess menu", "POHA", "DOSA", "RICE", "CHAI"),
+                        group(3, "Network ___", "STACK", "PACKET", "SOCKET", "ROUTER")));
+
+        for (int i = 0; i < 7; i++) {
+            LocalDate date = today.plusDays(i);
+            if (puzzles.findServableForDate("connections", date).isPresent()) continue;
+            Map<String, Object> content = new HashMap<>();
+            content.put("groups", variants.get(i % variants.size()));
+            Puzzle p = new Puzzle();
+            p.setGameType("connections");
+            p.setPublishDate(date);
+            p.setDifficulty(difficultyFor(date));
+            p.setContent(content);
+            p.setStatus(PuzzleStatus.SCHEDULED);
+            p.setAuthorId(editorId);
+            p.setReviewerId(editorId);
+            try {
+                puzzles.save(p);
+            } catch (Exception dup) {
+                // already there
+            }
+        }
+        log.info("Seeded 7 days of Connections puzzles");
+    }
+
+    private Map<String, Object> group(int level, String category, String... members) {
+        Map<String, Object> g = new HashMap<>();
+        g.put("level", level);
+        g.put("category", category);
+        g.put("members", List.of(members));
+        return g;
     }
 
     /** Easy on Monday, hardest on Friday/weekend (build doc section 2). */

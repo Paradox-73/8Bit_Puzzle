@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -30,6 +31,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle--corner" />
       <div className="auth-card">
         <h1 className="logo">
           <span className="logo__bit">8</span>BIT

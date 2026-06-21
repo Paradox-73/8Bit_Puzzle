@@ -85,7 +85,11 @@ export default function PlayPage() {
 
       {!loading && noPuzzle && (
         <div className="empty conn-empty">
-          <p>No {TITLES[game]} puzzle today.</p>
+          <p>
+            {game === 'wordle'
+              ? 'No Wordle puzzle today — check back tomorrow.'
+              : 'No Connections puzzle today — play Wordle instead.'}
+          </p>
           {game !== 'wordle' && (
             <Link className="btn btn--primary" to="/play">
               Play Wordle instead
