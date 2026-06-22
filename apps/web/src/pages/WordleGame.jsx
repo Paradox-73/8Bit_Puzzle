@@ -32,14 +32,38 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
   );
   const [streak, setStreak] = useState(null);
   const [egg, setEgg] = useState(null);
+  const [hints, setHints] = useState(initialPuzzle.hints || []);
+  const [hinting, setHinting] = useState(false);
+  const [warning, setWarning] = useState(null);
 
   const wordLength = puzzle?.config?.wordLength || 5;
   const maxGuesses = puzzle?.config?.maxGuesses || 6;
+
+  const hasHint = (kind) => hints.some((h) => h.kind === kind);
 
   const isOver = useMemo(() => {
     const s = puzzle?.status;
     return s === 'SOLVED' || s === 'FAILED';
   }, [puzzle]);
+
+  const revealHint = useCallback(
+    async (kind) => {
+      if (hinting || isOver || hints.some((h) => h.kind === kind)) return;
+      setHinting(true);
+      try {
+        const res = await api.hint(puzzle.puzzleId, kind);
+        setHints(res.hints || []);
+      } catch (err) {
+        toast(
+          err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
+          { type: 'warn' }
+        );
+      } finally {
+        setHinting(false);
+      }
+    },
+    [hinting, isOver, hints, puzzle, toast]
+  );
 
   // Pull streak for result screen.
   useEffect(() => {
@@ -75,6 +99,10 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
       setCurrent('');
 
       if (res.easterEgg) setEgg(res.easterEgg);
+      if (res.warning) {
+        setWarning(res.warning);
+        toast(res.warning, { type: 'warn', duration: 7000 });
+      }
 
       if (res.gameOver) {
         const status = res.status || (res.solved ? 'SOLVED' : 'FAILED');
@@ -158,6 +186,12 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
 
   return (
     <>
+      {warning && (
+        <div className="warn-banner" role="alert">
+          ⚠️ {warning}
+        </div>
+      )}
+
       <WordleGrid
         guesses={guesses}
         current={current}
@@ -165,6 +199,37 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
         maxGuesses={maxGuesses}
         shakeRow={shake}
       />
+
+      {!isOver && (
+        <div className="hint-bar">
+          <div className="hint-bar__buttons">
+            <button
+              className="btn btn--small btn--ghost"
+              onClick={() => revealHint('vowel')}
+              disabled={hinting || hasHint('vowel')}
+            >
+              💡 Reveal a vowel
+            </button>
+            <button
+              className="btn btn--small btn--ghost"
+              onClick={() => revealHint('consonant')}
+              disabled={hinting || hasHint('consonant')}
+            >
+              💡 Reveal a consonant
+            </button>
+          </div>
+          {hints.length > 0 && (
+            <div className="hint-chips">
+              {hints.map((h) => (
+                <span key={h.kind} className={'hint-chip hint-chip--' + h.kind}>
+                  Contains <strong>{h.letter}</strong>
+                  <span className="hint-chip__kind"> ({h.kind})</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isOver && !showResult && (
         <button className="btn btn--primary" onClick={() => setShowResult(true)}>

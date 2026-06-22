@@ -7,6 +7,7 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Entity
 @Table(name = "attempts", uniqueConstraints = {
@@ -44,6 +45,15 @@ public class Attempt {
     @Column(name = "eggs_found", columnDefinition = "jsonb")
     private List<String> eggsFound = new ArrayList<>();
 
+    /**
+     * Revealed hints. Wordle: [{"kind":"vowel","letter":"A"}] — only that the word contains the
+     * letter, never its position. Cryptic: [{"kind":"definition","text":"…"}]. Connections:
+     * [{"level":0,"word":"WIFI"}]. Server-authoritative and capped so a hint never solves the puzzle.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<Map<String, Object>> hints = new ArrayList<>();
+
     @Column(name = "started_at", nullable = false)
     private Instant startedAt = Instant.now();
 
@@ -79,6 +89,8 @@ public class Attempt {
     public void setCompletionMs(Integer completionMs) { this.completionMs = completionMs; }
     public List<String> getEggsFound() { return eggsFound; }
     public void setEggsFound(List<String> eggsFound) { this.eggsFound = eggsFound; }
+    public List<Map<String, Object>> getHints() { return hints; }
+    public void setHints(List<Map<String, Object>> hints) { this.hints = hints; }
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public Instant getFinishedAt() { return finishedAt; }

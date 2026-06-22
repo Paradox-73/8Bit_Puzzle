@@ -35,6 +35,18 @@ public class GameController {
         return game.guess(user.id(), user.username(), batch, puzzleId, move);
     }
 
+    /**
+     * Reveal one hint for today's puzzle. Body: {"kind":"vowel"|"consonant"} for Wordle, or
+     * {"kind":"definition"|"indicator"|"fodder"} for Cryptic. Server-authoritative and capped.
+     */
+    @PostMapping("/puzzles/{id}/hint")
+    public Map<String, Object> hint(@PathVariable("id") long puzzleId,
+                                    @RequestBody Map<String, Object> body,
+                                    @AuthenticationPrincipal AuthUser user) {
+        Object kind = body == null ? null : body.get("kind");
+        return game.hint(user.id(), puzzleId, kind == null ? null : kind.toString());
+    }
+
     @GetMapping("/me/attempts")
     public List<AttemptSummary> myAttempts(@AuthenticationPrincipal AuthUser user) {
         return game.myAttempts(user.id());

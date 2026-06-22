@@ -61,6 +61,16 @@ services:
       # ephemeral one. Put real values in a gitignored infra/.env (see infra/.env.example).
       JWT_SECRET: ${JWT_SECRET:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # Email OTP login. Codes are emailed via SMTP, or written to the log if MAIL_HOST is unset.
+      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN:-iiitb.ac.in}
+      OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # Admin master login code: typed in place of an emailed OTP for editor/admin accounts so an
+      # admin is never locked out by email. KEEP SECRET (set in gitignored infra/.env).
+      ADMIN_LOGIN_CODE: ${ADMIN_LOGIN_CODE:-}
       # Optional web push (leave blank to disable):
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

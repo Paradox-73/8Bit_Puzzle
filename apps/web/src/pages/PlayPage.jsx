@@ -4,18 +4,25 @@ import { api, ApiError } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 import WordleGame from './WordleGame.jsx';
 import ConnectionsGame from './ConnectionsGame.jsx';
+import CrypticGame from './CrypticGame.jsx';
+import HelpModal from '../components/HelpModal.jsx';
 
 // Supported games. Default is wordle. The selected game lives in the
 // ?game= query param so it is bookmarkable, e.g. /play?game=connections.
 const GAMES = [
   { type: 'wordle', label: 'Wordle' },
   { type: 'connections', label: 'Connections' },
+  { type: 'cryptic', label: 'Cryptic' },
 ];
 
 const TITLES = {
   wordle: 'Wordle',
   connections: 'Connections',
+  cryptic: 'Minute Cryptic',
 };
+
+// Which games have a How-to-Play / Tips / FAQ guide.
+const HELP_GAMES = new Set(['wordle', 'connections', 'cryptic']);
 
 export default function PlayPage() {
   const { toast } = useToast();
@@ -27,6 +34,8 @@ export default function PlayPage() {
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [noPuzzle, setNoPuzzle] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const hasHelp = HELP_GAMES.has(game);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +65,16 @@ export default function PlayPage() {
     load();
   }, [load]);
 
+  // First-timer onboarding: auto-open the guide once per game per browser (NYT-style).
+  useEffect(() => {
+    if (loading || noPuzzle || !puzzle || !hasHelp) return;
+    const key = '8bit.howto.' + game;
+    if (!localStorage.getItem(key)) {
+      setShowHelp(true);
+      localStorage.setItem(key, '1');
+    }
+  }, [loading, noPuzzle, puzzle, game, hasHelp]);
+
   const selectGame = (type) => {
     setSearchParams(type === 'wordle' ? {} : { game: type });
   };
@@ -78,7 +97,19 @@ export default function PlayPage() {
 
       <header className="play-header">
         <h2 className="play-title">{TITLES[game]}</h2>
-        {puzzle?.date && <span className="play-sub">{puzzle.date}</span>}
+        <div className="play-header__right">
+          {puzzle?.date && <span className="play-sub">{puzzle.date}</span>}
+          {hasHelp && (
+            <button
+              className="help-btn"
+              onClick={() => setShowHelp(true)}
+              aria-label="How to play"
+              title="How to play"
+            >
+              ?
+            </button>
+          )}
+        </div>
       </header>
 
       {loading && <div className="loading">Loading puzzle…</div>}
@@ -102,8 +133,16 @@ export default function PlayPage() {
         <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
       )}
 
-      {!loading && puzzle && puzzle.gameType !== 'connections' && (
+      {!loading && puzzle && puzzle.gameType === 'cryptic' && (
+        <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+      )}
+
+      {!loading && puzzle && puzzle.gameType !== 'connections' && puzzle.gameType !== 'cryptic' && (
         <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+      )}
+
+      {showHelp && (
+        <HelpModal game={game} onClose={() => setShowHelp(false)} />
       )}
     </div>
   );

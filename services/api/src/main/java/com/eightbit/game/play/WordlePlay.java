@@ -11,9 +11,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 public class WordlePlay implements GamePlay {
+
+    private static final Set<Character> VOWELS = Set.of('A', 'E', 'I', 'O', 'U');
 
     private final WordleEngine engine;
     private final WordList wordList;
@@ -40,7 +44,41 @@ public class WordlePlay implements GamePlay {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("config", Map.of("maxGuesses", WordleEngine.MAX_GUESSES, "wordLength", WordleEngine.WORD_LENGTH));
         view.put("guesses", rows);
+        view.put("hints", attempt == null ? List.of() : attempt.getHints());
         return view;
+    }
+
+    /**
+     * Reveal one random vowel or consonant from the answer. Idempotent per kind (re-requesting the
+     * same kind returns the already-revealed letter rather than re-rolling), and capped at one of
+     * each kind -- so at most two of five letters are ever exposed.
+     */
+    @Override
+    public Map<String, Object> hint(Puzzle p, Attempt attempt, String kind) {
+        String k = kind == null ? "" : kind.trim().toLowerCase();
+        if (!k.equals("vowel") && !k.equals("consonant")) {
+            throw ApiException.badRequest("BAD_HINT_KIND", "Hint kind must be 'vowel' or 'consonant'");
+        }
+        // Already revealed this kind? Return it unchanged.
+        for (Map<String, Object> h : attempt.getHints()) {
+            if (k.equals(h.get("kind"))) return h;
+        }
+        String answer = p.answer().toUpperCase();
+        boolean wantVowel = k.equals("vowel");
+        List<Integer> candidates = new ArrayList<>();
+        for (int i = 0; i < answer.length(); i++) {
+            if (VOWELS.contains(answer.charAt(i)) == wantVowel) candidates.add(i);
+        }
+        if (candidates.isEmpty()) {
+            throw ApiException.badRequest("NO_HINT", "Today's word has no " + k + " to reveal");
+        }
+        // Reveal only that the word *contains* this letter — never which position it's in.
+        int pos = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        Map<String, Object> hint = new LinkedHashMap<>();
+        hint.put("kind", k);
+        hint.put("letter", String.valueOf(answer.charAt(pos)));
+        attempt.getHints().add(hint);
+        return hint;
     }
 
     @Override

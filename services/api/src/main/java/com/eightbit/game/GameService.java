@@ -2,6 +2,7 @@ package com.eightbit.game;
 
 import com.eightbit.auth.UserRepository;
 import com.eightbit.auth.User;
+import com.eightbit.auth.otp.EmailSender;
 import com.eightbit.common.ratelimit.RateLimiter;
 import com.eightbit.common.web.ApiException;
 import com.eightbit.game.dto.GameDtos.AttemptSummary;
@@ -9,6 +10,9 @@ import com.eightbit.game.event.PuzzleCompletedEvent;
 import com.eightbit.game.play.GamePlay;
 import com.eightbit.profile.StatsService;
 import com.eightbit.profile.UserStats;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +33,8 @@ public class GameService {
     /** The puzzle "day" rolls over at midnight IST for everyone. */
     public static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
 
+    private static final Logger log = LoggerFactory.getLogger(GameService.class);
+
     private static final int GUESS_LIMIT = 30;
     private static final Duration GUESS_WINDOW = Duration.ofSeconds(10);
 
@@ -40,10 +46,13 @@ public class GameService {
     private final RateLimiter rateLimiter;
     private final UserRepository users;
     private final ApplicationEventPublisher events;
+    private final EmailSender email;
+    private final String teamEmail;
 
     public GameService(PuzzleRepository puzzles, AttemptRepository attempts, List<GamePlay> playList,
                        StatsService statsService, EasterEggService easterEggs, RateLimiter rateLimiter,
-                       UserRepository users, ApplicationEventPublisher events) {
+                       UserRepository users, ApplicationEventPublisher events, EmailSender email,
+                       @Value("${app.feedback.to:8bit@iiitb.ac.in}") String teamEmail) {
         this.puzzles = puzzles;
         this.attempts = attempts;
         playList.forEach(p -> plays.put(p.type(), p));
@@ -52,6 +61,8 @@ public class GameService {
         this.rateLimiter = rateLimiter;
         this.users = users;
         this.events = events;
+        this.email = email;
+        this.teamEmail = teamEmail;
     }
 
     public LocalDate today() {
@@ -100,6 +111,34 @@ public class GameService {
         return view;
     }
 
+    /** Reveal one hint (vowel/consonant) for today's in-progress puzzle. */
+    @Transactional
+    public Map<String, Object> hint(long userId, long puzzleId, String kind) {
+        Puzzle p = puzzles.findById(puzzleId)
+                .orElseThrow(() -> ApiException.notFound("NO_PUZZLE", "Puzzle not found"));
+        Puzzle todayPuzzle = resolveTodayPuzzle(p.getGameType());
+        if (!todayPuzzle.getId().equals(p.getId())) {
+            throw ApiException.forbidden("NOT_TODAY", "That puzzle is not in play right now");
+        }
+        if (!rateLimiter.allow("hint:" + userId, GUESS_LIMIT, GUESS_WINDOW)) {
+            throw ApiException.tooManyRequests("RATE_LIMITED", "Slow down — too many requests");
+        }
+        GamePlay gp = play(p.getGameType());
+        Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, puzzleId)
+                .orElseGet(() -> new Attempt(userId, puzzleId));
+        if (attempt.isFinished()) {
+            throw ApiException.conflict("ALREADY_FINISHED", "You've already finished today's puzzle");
+        }
+        Map<String, Object> hint = gp.hint(p, attempt, kind);
+        attempts.save(attempt);
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("hint", hint);
+        resp.put("hints", attempt.getHints());
+        resp.put("status", status(attempt));
+        return resp;
+    }
+
     @Transactional
     public Map<String, Object> guess(long userId, String username, int batchYear, long puzzleId,
                                      Map<String, Object> move) {
@@ -135,14 +174,18 @@ public class GameService {
             int completionMs = (int) Math.min(Integer.MAX_VALUE, ms);
             boolean firstSolver = st.solved() && attempts.countByPuzzleIdAndSolvedTrue(puzzleId) == 0;
             int solveHour = ZonedDateTime.now(ZONE).getHour();
+            int guessesUsed = attempt.getGuesses().size();
 
-            UserStats stats = statsService.recordCompletion(userId, today(), st.solved(), firstSolver, solveHour);
+            UserStats stats = statsService.recordCompletion(userId, today(), st.solved(), firstSolver,
+                    solveHour, guessesUsed, p.getGameType());
             attempt.setSolved(st.solved());
             attempt.setCompletionMs(completionMs);
             attempt.setFinishedAt(Instant.now());
             int sc = gp.score(p, attempt, stats.getCurrentStreak());
             attempt.setScore(sc);
             applyAuditFlags(attempt, st.solved(), completionMs);
+            maybeWarnQuickSolve(resp, attempt, stats, st.solved(), guessesUsed, p.getGameType(),
+                    userId, username, batchYear);
 
             resp.put("score", sc);
             resp.put("shareGrid", gp.shareGrid(p, attempt));
@@ -175,6 +218,33 @@ public class GameService {
         if (completionMs < 1500 || (moves >= 3 && completionMs < 4000)) {
             a.setFlagged(true);
             a.setFlagReason("Solved in " + completionMs + "ms over " + moves + " moves");
+        }
+    }
+
+    /**
+     * When a player keeps solving in ≤2 guesses on consecutive days (a leaked-answer tell), warn
+     * them in the response, flag the attempt, and email the team. Wordle only.
+     */
+    private void maybeWarnQuickSolve(Map<String, Object> resp, Attempt attempt, UserStats stats,
+                                     boolean solved, int guessesUsed, String gameType,
+                                     long userId, String username, int batchYear) {
+        boolean tripped = "wordle".equals(gameType) && solved
+                && guessesUsed <= 2 && stats.isFlagged();
+        if (!tripped) return;
+
+        attempt.setFlagged(true);
+        attempt.setFlagReason(stats.getFlagReason());
+        // Player-facing: a gentle nudge only. The detection detail stays in the team email below.
+        resp.put("warning", "A friendly reminder to play fair and solve the puzzles yourself 🙂");
+
+        try {
+            email.send(teamEmail, "[8Bit] Quick-solve flag: " + username,
+                    "User '" + username + "' (id=" + userId + ", batch=" + batchYear + ") was flagged.\n"
+                    + "Reason: " + stats.getFlagReason() + "\n"
+                    + "Today's attempt: solved in " + guessesUsed + " guesses, puzzle="
+                    + attempt.getPuzzleId() + ".");
+        } catch (Exception e) {
+            log.warn("Failed to send quick-solve flag email for user {}: {}", userId, e.getMessage());
         }
     }
 

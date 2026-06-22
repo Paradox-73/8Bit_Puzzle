@@ -1,6 +1,7 @@
 server:
-  port: 8080
-  # Behind Cloudflare Tunnel in production; tell Spring to trust forwarded headers.
+  # Honour $PORT (Render/most PaaS) or $SERVER_PORT (local), else 8080.
+  port: ${PORT:${SERVER_PORT:8080}}
+  # Behind a reverse proxy / tunnel in production; tell Spring to trust forwarded headers.
   forward-headers-strategy: framework
   tomcat:
     threads:
@@ -39,6 +40,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      # Managed Redis (e.g. Upstash) requires TLS. Set REDIS_SSL=true for those; local Redis is plain.
+      ssl:
+        enabled: ${REDIS_SSL:false}
       timeout: 2s
   task:
     scheduling:
@@ -64,7 +68,9 @@ app:
     # No secret committed. If unset, the app mints an EPHEMERAL key at startup (dev only).
     # Production MUST set JWT_SECRET to a stable value of >= 32 bytes.
     secret: ${JWT_SECRET:}
-    access-token-ttl-minutes: ${JWT_TTL_MINUTES:720}   # 12h for v1; shorten + add refresh later
+    # 30 days so daily players stay logged in across days (token is kept in the browser's
+    # localStorage). Requires a stable JWT_SECRET, else a restart invalidates everyone's token.
+    access-token-ttl-minutes: ${JWT_TTL_MINUTES:43200}
   cors:
     # Comma-separated allowed origin patterns. "*" is fine because we authenticate with
     # a Bearer token in a header (no cookies), so there is no CSRF surface to protect.
@@ -77,6 +83,12 @@ app:
   content:
     # Editors must keep at least this many days of puzzles queued per game.
     buffer-warn-below-days: 14
+  admin:
+    # Master login code for editor/admin accounts: typed in place of the emailed OTP so an admin can
+    # always get in without depending on email delivery. Keep it SECRET (gitignored env) — never
+    # commit a real value. Empty = disabled (admins use the normal emailed code). Falls back to
+    # SEED_EDITOR_PASSWORD for convenience since that env is otherwise unused now.
+    login-code: ${ADMIN_LOGIN_CODE:${SEED_EDITOR_PASSWORD:}}
   otp:
     # OFF by default so dev needs no email server. Turn on for launch to require @iiitb.ac.in
     # verification before an account counts toward batch scores.

@@ -127,16 +127,15 @@ export async function request(path, opts = {}) {
 // ---- Convenience endpoint helpers ----
 
 export const api = {
-  // AUTH
-  register: (payload) =>
-    request('/auth/register', { method: 'POST', body: payload, auth: false }),
-  login: (payload) =>
-    request('/auth/login', { method: 'POST', body: payload, auth: false }),
-
-  // EMAIL OTP VERIFICATION
-  verifyOtp: (code) =>
-    request('/auth/verify-otp', { method: 'POST', body: { code } }),
-  resendOtp: () => request('/auth/resend-otp', { method: 'POST' }),
+  // AUTH (passwordless). One entry point for sign-up + login; then verify the emailed code.
+  start: ({ email, rollNumber, username }) =>
+    request('/auth/start', {
+      method: 'POST',
+      body: { email, rollNumber, username },
+      auth: false,
+    }),
+  verifyCode: (email, code) =>
+    request('/auth/verify-code', { method: 'POST', body: { email, code }, auth: false }),
 
   // GAME
   getToday: (type = 'wordle') => request('/puzzles/today', { query: { type } }),
@@ -145,6 +144,13 @@ export const api = {
   // Generic move: posts an arbitrary JSON body as-is (e.g. Connections selection).
   move: (puzzleId, body) =>
     request(`/puzzles/${puzzleId}/guess`, { method: 'POST', body }),
+  // Reveal one hint. kind: 'vowel'|'consonant' (Wordle) or 'definition'|'indicator'|'fodder' (Cryptic).
+  hint: (puzzleId, kind) =>
+    request(`/puzzles/${puzzleId}/hint`, { method: 'POST', body: { kind } }),
+
+  // FEEDBACK / BUG REPORTS
+  feedback: ({ type, message, context }) =>
+    request('/feedback', { method: 'POST', body: { type, message, context } }),
 
   // LEADERBOARD (may be a separate service — uses LEADERBOARD_BASE)
   leaderboard: ({ type = 'wordle', scope = 'campus', window = 'daily' }) =>

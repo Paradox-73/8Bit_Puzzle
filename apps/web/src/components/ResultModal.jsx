@@ -3,7 +3,7 @@ import { useToast } from './Toast.jsx';
 
 export default function ResultModal({ result, streak, puzzle, onClose }) {
   const { toast } = useToast();
-  const { solved, score, answer, shareGrid } = result;
+  const { solved, answer, shareGrid, parse } = result;
 
   // Build a fallback share text if the server didn't send shareGrid
   // (e.g. when result was restored from /today which has no shareGrid).
@@ -54,8 +54,6 @@ export default function ResultModal({ result, streak, puzzle, onClose }) {
           {solved ? '✓ Solved!' : '✗ Out of guesses'}
         </h2>
 
-        {score != null && <div className="result-score">{score} pts</div>}
-
         {answer && (
           <p className="result-answer">
             Answer: <strong>{String(answer).toUpperCase()}</strong>
@@ -66,6 +64,20 @@ export default function ResultModal({ result, streak, puzzle, onClose }) {
           <p className="result-streak">
             🔥 Streak: <strong>{streak}</strong>
           </p>
+        )}
+
+        {parse && (
+          <div className="cryptic-parse">
+            {parse.device && (
+              <p className="cryptic-parse__device">Device: <strong>{parse.device}</strong></p>
+            )}
+            <dl className="cryptic-parse__grid">
+              {parse.definition && (<><dt>Definition</dt><dd>{parse.definition}</dd></>)}
+              {parse.indicator && (<><dt>Indicator</dt><dd>{parse.indicator}</dd></>)}
+              {parse.fodder && (<><dt>Fodder</dt><dd>{parse.fodder}</dd></>)}
+            </dl>
+            {parse.explanation && <p className="cryptic-parse__how">{parse.explanation}</p>}
+          </div>
         )}
 
         <button className="btn btn--primary btn--block btn--lg" onClick={share}>

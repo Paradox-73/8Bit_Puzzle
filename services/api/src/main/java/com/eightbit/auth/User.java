@@ -22,7 +22,8 @@ public class User {
     @Column(unique = true, nullable = false, length = 30)
     private String username;
 
-    @Column(name = "password_hash", nullable = false, length = 100)
+    // Passwordless auth: login is by emailed OTP, so most accounts have no password. Nullable.
+    @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
     @Column(name = "batch_year", nullable = false)

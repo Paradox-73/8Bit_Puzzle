@@ -8,7 +8,6 @@ import com.eightbit.common.security.JwtService;
 import com.eightbit.common.web.ApiException;
 import com.eightbit.profile.UserStats;
 import com.eightbit.profile.UserStatsRepository;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,114 +19,127 @@ public class AuthService {
     private final UserRepository users;
     private final UserStatsRepository stats;
     private final RollNumberParser rollParser;
-    private final PasswordEncoder encoder;
     private final JwtService jwt;
     private final VerificationService verification;
     private final RateLimiter rateLimiter;
     private final AppProperties props;
+    private final String adminLoginCode;
 
     public AuthService(UserRepository users, UserStatsRepository stats, RollNumberParser rollParser,
-                       PasswordEncoder encoder, JwtService jwt, VerificationService verification,
-                       RateLimiter rateLimiter, AppProperties props) {
+                       JwtService jwt, VerificationService verification,
+                       RateLimiter rateLimiter, AppProperties props,
+                       @org.springframework.beans.factory.annotation.Value("${app.admin.login-code:}")
+                       String adminLoginCode) {
         this.users = users;
         this.stats = stats;
         this.rollParser = rollParser;
-        this.encoder = encoder;
         this.jwt = jwt;
         this.verification = verification;
         this.rateLimiter = rateLimiter;
         this.props = props;
+        this.adminLoginCode = adminLoginCode;
     }
 
+    private boolean isAdmin(User u) {
+        return u.roleList().contains("ROLE_ADMIN") || u.roleList().contains("ROLE_EDITOR");
+    }
+
+    /** The admin master code is accepted in place of the emailed OTP, but only for admins/editors. */
+    private boolean isAdminCode(User u, String code) {
+        return adminLoginCode != null && !adminLoginCode.isBlank()
+                && isAdmin(u) && adminLoginCode.equals(code);
+    }
+
+    /**
+     * One entry point for both sign-up and login (they collect the same details). Identify by email:
+     * an existing account logs in (roll + username must match); a new email creates an account. Either
+     * way a one-time code is then emailed and the client finishes at /auth/verify-code.
+     */
     @Transactional
-    public AuthResponse register(RegisterRequest req) {
-        String roll = rollParser.normalize(req.rollNumber());
-        RollNumberParser.Parsed parsed = rollParser.parse(roll);
+    public AuthResponse start(String rawEmail, String rawRoll, String rawUsername) {
+        String email = rawEmail == null ? "" : rawEmail.trim().toLowerCase();
+        if (!rateLimiter.allow("otp-request:" + email, 3, Duration.ofMinutes(2))) {
+            throw ApiException.tooManyRequests("RATE_LIMITED", "Please wait before requesting another code");
+        }
+        User existing = users.findByEmail(email).orElse(null);
+        if (existing != null) {
+            // Returning user: roll + username must match this email's account.
+            String roll = rollParser.normalize(rawRoll);
+            String username = rawUsername == null ? "" : rawUsername.trim();
+            if (!existing.getRollNumber().equalsIgnoreCase(roll)
+                    || !existing.getUsername().equalsIgnoreCase(username)) {
+                throw ApiException.unauthorized("BAD_DETAILS", "Those details don't match this email");
+            }
+            return startSession(existing);
+        }
+        return createAccount(email, rawRoll, rawUsername);
+    }
 
-        String email = req.email() == null ? "" : req.email().trim().toLowerCase();
-
+    private AuthResponse createAccount(String email, String rawRoll, String rawUsername) {
+        String roll = rollParser.normalize(rawRoll);
+        RollNumberParser.Parsed parsed = rollParser.parse(roll);  // validates the roll format
+        String username = rawUsername == null ? "" : rawUsername.trim();
+        if (!username.matches("^[A-Za-z0-9_]{3,30}$")) {
+            throw ApiException.badRequest("BAD_USERNAME",
+                    "Username must be 3–30 letters, numbers or underscore");
+        }
+        // Require the configured college domain (default @iiitb.ac.in) so batch scores stay honest.
+        String domain = props.getOtp().getEmailDomain();
+        if (domain != null && !domain.isBlank() && !email.endsWith("@" + domain.toLowerCase())) {
+            throw ApiException.badRequest("INVALID_EMAIL", "Use your @" + domain + " email");
+        }
         if (users.existsByRollNumber(roll)) {
             throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
         }
-        if (users.existsByUsername(req.username())) {
+        if (users.existsByUsername(username)) {
             throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
-        }
-        // One email -> one account (a defence against fake-account batch stuffing).
-        if (users.existsByEmail(email)) {
-            throw ApiException.conflict("EMAIL_TAKEN", "An account already uses this email");
-        }
-        // When verification is on, require the college domain so batch scores stay honest.
-        String domain = props.getOtp().getEmailDomain();
-        if (props.getOtp().isEnabled() && domain != null && !domain.isBlank()
-                && !email.endsWith("@" + domain.toLowerCase())) {
-            throw ApiException.badRequest("INVALID_EMAIL", "Use your @" + domain + " email");
         }
 
         User u = new User();
         u.setRollNumber(roll);
-        u.setUsername(req.username());
-        u.setPasswordHash(encoder.encode(req.password()));
+        u.setUsername(username);
         u.setBatchYear(parsed.batchYear());
         u.setProgram(parsed.program());
         u.setEmail(email);
         u.setRoles("ROLE_USER");
-        // When OTP is off (dev default) accounts are auto-verified; when on, they must verify
-        // before counting toward batch scores.
-        u.setEmailVerified(!props.getOtp().isEnabled());
+        u.setEmailVerified(false);  // verified by completing the OTP login
         u = users.save(u);
-
-        // Stats row up-front so streak/profile reads never NPE.
-        stats.save(new UserStats(u.getId()));
-
-        if (props.getOtp().isEnabled()) {
-            verification.issue(u);
-        }
-        return toAuthResponse(u);
+        stats.save(new UserStats(u.getId()));  // stats row up-front so profile reads never NPE
+        return startSession(u);
     }
 
+    /**
+     * Login step 2: verify the code and issue a token. Admins/editors may type the admin master code
+     * (configured, secret) instead of an emailed code, so they're never locked out by email delivery.
+     */
     @Transactional
-    public void verifyOtp(long userId, String code) {
-        verification.check(userId, code);
-        User u = users.findById(userId)
-                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "User not found"));
-        u.setEmailVerified(true);
-        users.save(u);
+    public AuthResponse verifyCode(String rawEmail, String code) {
+        String email = rawEmail == null ? "" : rawEmail.trim().toLowerCase();
+        User u = users.findByEmail(email)
+                .orElseThrow(() -> ApiException.unauthorized("BAD_DETAILS", "Those details don't match an account"));
+        if (!isAdminCode(u, code)) {
+            verification.check(u.getId(), code);
+        }
+        if (!u.isEmailVerified()) {
+            u.setEmailVerified(true);
+            users.save(u);
+        }
+        return token(u);
     }
 
-    @Transactional(readOnly = true)
-    public void resendOtp(long userId) {
-        if (!props.getOtp().isEnabled()) {
-            throw ApiException.badRequest("OTP_NOT_PENDING", "Email verification is not required");
-        }
-        if (!rateLimiter.allow("otp-resend:" + userId, 1, Duration.ofSeconds(60))) {
-            throw ApiException.tooManyRequests("RATE_LIMITED", "Please wait before requesting another code");
-        }
-        User u = users.findById(userId)
-                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "User not found"));
-        if (u.isEmailVerified()) {
-            throw ApiException.badRequest("OTP_NOT_PENDING", "Your email is already verified");
-        }
+    /** Always email a one-time code and tell the client to verify it. No bypass — secure everywhere. */
+    private AuthResponse startSession(User u) {
         verification.issue(u);
+        return new AuthResponse(true, null, null);
     }
 
     public boolean isVerified(long userId) {
         return users.findById(userId).map(User::isEmailVerified).orElse(true);
     }
 
-    @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest req) {
-        String roll = rollParser.normalize(req.rollNumber());
-        User u = users.findByRollNumber(roll)
-                .orElseThrow(() -> ApiException.unauthorized("BAD_CREDENTIALS", "Invalid roll number or password"));
-        if (!encoder.matches(req.password(), u.getPasswordHash())) {
-            throw ApiException.unauthorized("BAD_CREDENTIALS", "Invalid roll number or password");
-        }
-        return toAuthResponse(u);
-    }
-
-    private AuthResponse toAuthResponse(User u) {
-        String token = jwt.issue(u.getId(), u.getUsername(), u.getBatchYear(), u.roleList());
-        return new AuthResponse(token, toDto(u));
+    private AuthResponse token(User u) {
+        String accessToken = jwt.issue(u.getId(), u.getUsername(), u.getBatchYear(), u.roleList());
+        return new AuthResponse(false, accessToken, toDto(u));
     }
 
     public static UserDto toDto(User u) {

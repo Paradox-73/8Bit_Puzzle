@@ -5,7 +5,6 @@ import NavBar from './components/NavBar.jsx';
 import InstallHint from './components/InstallHint.jsx';
 
 import LoginPage from './pages/LoginPage.jsx';
-import RegisterPage from './pages/RegisterPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import PlayPage from './pages/PlayPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
@@ -27,10 +26,8 @@ export default function App() {
             path="/login"
             element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
           />
-          <Route
-            path="/register"
-            element={isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />}
-          />
+          {/* Sign-up and login are one screen now; keep /register working as an alias. */}
+          <Route path="/register" element={<Navigate to="/login" replace />} />
 
           <Route
             path="/"

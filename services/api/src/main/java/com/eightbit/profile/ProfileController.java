@@ -7,6 +7,7 @@ import com.eightbit.common.web.ApiException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +37,7 @@ public class ProfileController {
                         "emailVerified", u.isEmailVerified(),
                         "roles", u.roleList()
                 ),
-                "stats", statsView(s)
+                "stats", statsView(s, true)
         );
     }
 
@@ -49,18 +50,24 @@ public class ProfileController {
                 "username", u.getUsername(),
                 "batchYear", u.getBatchYear(),
                 "program", u.getProgram() == null ? "" : u.getProgram(),
-                "stats", statsView(s)
+                "stats", statsView(s, false)
         );
     }
 
-    private Map<String, Object> statsView(UserStats s) {
-        return Map.of(
-                "currentStreak", s.getCurrentStreak(),
-                "bestStreak", s.getBestStreak(),
-                "totalPlayed", s.getTotalPlayed(),
-                "totalSolved", s.getTotalSolved(),
-                "winRate", s.winRatePercent(),
-                "titles", s.getTitles() == null ? List.of() : s.getTitles()
-        );
+    private Map<String, Object> statsView(UserStats s, boolean includePrivate) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("currentStreak", s.getCurrentStreak());
+        view.put("bestStreak", s.getBestStreak());
+        view.put("totalPlayed", s.getTotalPlayed());
+        view.put("totalSolved", s.getTotalSolved());
+        view.put("winRate", s.winRatePercent());
+        view.put("titles", s.getTitles() == null ? List.of() : s.getTitles());
+        view.put("guessDistribution", s.getGuessDistribution() == null ? List.of() : s.getGuessDistribution());
+        if (includePrivate) {
+            // Flag state is only for the player themselves, never exposed on public profiles.
+            view.put("flagged", s.isFlagged());
+            view.put("flagReason", s.getFlagReason() == null ? "" : s.getFlagReason());
+        }
+        return view;
     }
 }

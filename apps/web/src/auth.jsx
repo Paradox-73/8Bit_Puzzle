@@ -34,18 +34,27 @@ export function AuthProvider({ children }) {
     return () => setUnauthorizedHandler(null);
   }, [applyAuth]);
 
-  const login = useCallback(
-    async ({ rollNumber, password }) => {
-      const data = await api.login({ rollNumber, password });
-      applyAuth(data.accessToken, data.user);
-      return data.user;
+  // If a response carries a token, it means OTP was off (or the code was just verified) and we're
+  // logged in. Otherwise otpRequired is true and the page should collect the emailed code.
+  const applyIfToken = useCallback(
+    (data) => {
+      if (data?.accessToken) applyAuth(data.accessToken, data.user);
+      return data;
     },
     [applyAuth]
   );
 
-  const register = useCallback(
-    async ({ rollNumber, username, email, password }) => {
-      const data = await api.register({ rollNumber, username, email, password });
+  // Step 1 for sign-up + login: email + roll + username; a code is emailed. Returns { otpRequired }.
+  const start = useCallback(
+    async ({ email, rollNumber, username }) =>
+      applyIfToken(await api.start({ email, rollNumber, username })),
+    [applyIfToken]
+  );
+
+  // Step 2: verify the emailed code. Logs in on success.
+  const verifyCode = useCallback(
+    async (email, code) => {
+      const data = await api.verifyCode(email, code);
       applyAuth(data.accessToken, data.user);
       return data.user;
     },
@@ -77,13 +86,13 @@ export function AuthProvider({ children }) {
       user,
       isAuthenticated: !!token,
       isEditor,
-      login,
-      register,
+      start,
+      verifyCode,
       logout,
       refreshUser,
       setUser,
     }),
-    [token, user, isEditor, login, register, logout, refreshUser]
+    [token, user, isEditor, start, verifyCode, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

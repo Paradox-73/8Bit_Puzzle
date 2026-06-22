@@ -1,0 +1,62 @@
+# 8Bit — always-on deploy for a small (1 GB) VM (e.g. GCP e2-micro).
+#
+# What runs on the VM:
+#   - api   : the Spring Boot backend (JVM only; Postgres=Neon, Redis=Upstash live off-box)
+#   - caddy : a tiny reverse proxy that AUTOMATICALLY gets a free HTTPS certificate for your
+#             domain and forwards https://YOURDOMAIN -> the api. This is what makes the backend
+#             reachable from your Vercel site (which is https and refuses plain-http backends).
+#
+# Setup: fill infra/.env (incl. SITE_DOMAIN = your DuckDNS subdomain), then:
+#   docker compose -f docker-compose.cloud.yml up -d --build
+services:
+  api:
+    build: ../services/api
+    environment:
+      # --- Neon Postgres (keep ?sslmode=require in the URL) ---
+      DB_URL: ${DB_URL:-}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      # --- Upstash Redis (TLS) ---
+      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-true}
+      # --- Core secrets ---
+      JWT_SECRET: ${JWT_SECRET:-}
+      ADMIN_LOGIN_CODE: ${ADMIN_LOGIN_CODE:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # --- Email OTP (Brevo/Resend SMTP) ---
+      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN:-iiitb.ac.in}
+      OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # --- Optional web push ---
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      # Heap capped for a 1 GB box.
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m}
+    # Exposed only to the VM's localhost (for debugging via curl); the internet reaches it via caddy.
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - api
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in infra/.env, e.g. bitpuzzle.duckdns.org}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

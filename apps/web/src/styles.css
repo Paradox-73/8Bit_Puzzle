@@ -268,8 +268,8 @@ button:focus-visible,
 /* ---------- Logo ----------
    Blocky pixel "8Bit" wordmark with a layered hard shadow in brand blue. */
 .logo {
-  font-family: var(--font-display);
-  font-size: 1.9rem;
+  font-family: var(--font-body); /* VT323 */
+  font-size: 2.8rem;
   font-weight: 400;
   letter-spacing: 2px;
   line-height: 1;
@@ -280,13 +280,15 @@ button:focus-visible,
     6px 6px 0 var(--shadow-ink);
 }
 .logo--sm {
-  font-size: 1.15rem;
+  font-size: 1.7rem;
   letter-spacing: 1px;
   text-shadow: 1px 1px 0 var(--green), 2px 2px 0 var(--green-d),
     3px 3px 0 var(--shadow-ink);
 }
 .logo__bit {
-  color: var(--green);
+  /* Match the rest of the wordmark (white/ink) so the "8" doesn't vanish into its own blue
+     shadow on the login screen. The blue stair-step text-shadow stays as the brand accent. */
+  color: inherit;
 }
 
 /* ---------- Buttons ---------- */
@@ -453,8 +455,8 @@ input[type='range'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
+  font-family: var(--font-body); /* VT323 */
+  font-size: 1.5rem;
   color: var(--on-fill);
   background: var(--green);
   border: 3px solid var(--green-d);
@@ -1658,3 +1660,240 @@ input[type='range'] {
 .verify-banner__msg--ok {
   color: var(--accent);
 }
+
+/* ---- Anti-cheat warning banner ---- */
+.warn-banner {
+  background: var(--bg-elev-2);
+  border: 2px solid var(--warn);
+  color: var(--text);
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  box-shadow: var(--shadow-px-sm);
+}
+
+/* ---- Play header help button ---- */
+.play-header__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.help-btn {
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-px-sm);
+}
+.help-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Hint bar (Wordle + Cryptic) ---- */
+.hint-bar { margin: 12px 0; }
+.hint-bar__buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hint-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+.hint-chip {
+  background: var(--bg-elev-2);
+  border: 2px solid var(--accent);
+  padding: 4px 8px;
+  font-size: var(--fs-xs);
+  box-shadow: var(--shadow-px-sm);
+}
+.hint-chip__kind { color: var(--text-dim); }
+
+/* ---- Help modal ---- */
+.modal--help { max-width: 480px; text-align: left; }
+.help-tabs { margin: 10px 0 14px; }
+.help-body { font-size: var(--fs-sm); line-height: 1.45; }
+.help-section p { margin: 8px 0; }
+.help-list { list-style: none; padding: 0; margin: 8px 0; }
+.help-list li { margin: 8px 0; padding-left: 4px; line-height: 1.4; }
+.help-note {
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--bg-elev-2);
+  border-left: 3px solid var(--accent);
+}
+.help-example {
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  padding: 10px;
+  margin: 10px 0;
+}
+.help-example__clue { font-family: var(--font-mono); }
+.help-subtitle {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  margin: 16px 0 8px;
+  color: var(--accent);
+}
+.help-devices { margin: 0; }
+.help-device { margin: 8px 0; }
+.help-device dt { font-weight: bold; color: var(--text); }
+.help-device dd { margin: 2px 0 0; color: var(--text-dim); }
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border: 1px solid var(--shadow-ink);
+}
+.swatch--green { background: var(--green); }
+.swatch--yellow { background: var(--yellow); }
+.swatch--grey { background: var(--grey); }
+
+/* ---- Feedback form ---- */
+.feedback-form { text-align: left; }
+.feedback-input {
+  width: 100%;
+  margin: 12px 0;
+  padding: 10px;
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.feedback-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.help-links { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- Guess distribution ---- */
+.dist { display: flex; flex-direction: column; gap: 6px; }
+.dist-row { display: flex; align-items: center; gap: 8px; }
+.dist-row__label {
+  width: 14px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.dist-row__track { flex: 1; }
+.dist-row__bar {
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: 3px 8px;
+  text-align: right;
+  min-width: 24px;
+  font-size: var(--fs-xs);
+  box-shadow: var(--shadow-px-sm);
+}
+.dist-row__count { font-weight: bold; }
+
+/* ---- Cryptic game ---- */
+.cryptic { display: flex; flex-direction: column; gap: 12px; }
+.cryptic-clue {
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  padding: 16px;
+  text-align: center;
+  box-shadow: var(--shadow-px);
+}
+.cryptic-clue__text { font-size: var(--fs-body); line-height: 1.4; margin: 0; }
+.cryptic-clue__enum {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+}
+.cryptic-guesses { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.cryptic-guess {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 2px solid var(--border);
+  font-size: var(--fs-sm);
+  letter-spacing: 1px;
+}
+.cryptic-guess--right { border-color: var(--green); color: var(--green); }
+.cryptic-guess--wrong { opacity: 0.7; }
+.cryptic-guess__mark { font-weight: bold; }
+.cryptic-input-row { display: flex; gap: 8px; }
+.cryptic-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  text-transform: uppercase;
+  box-sizing: border-box;
+}
+.cryptic-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.cryptic-tries { text-align: center; color: var(--text-dim); font-size: var(--fs-xs); margin: 0; }
+.cryptic-hints { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.cryptic-hint {
+  background: var(--bg-elev-2);
+  border-left: 3px solid var(--accent);
+  padding: 6px 10px;
+}
+.cryptic-hint__kind {
+  display: block;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-family: var(--font-display);
+  margin-bottom: 2px;
+}
+.cryptic-hint__text { font-size: var(--fs-sm); }
+
+/* ---- Cryptic parse in result modal ---- */
+.cryptic-parse {
+  text-align: left;
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  padding: 10px 12px;
+  margin: 12px 0;
+}
+.cryptic-parse__device { margin: 0 0 6px; color: var(--accent); }
+.cryptic-parse__grid { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.cryptic-parse__grid dt { color: var(--text-dim); }
+.cryptic-parse__grid dd { margin: 0; }
+.cryptic-parse__how { margin: 8px 0 0; font-size: var(--fs-sm); line-height: 1.4; }
+
+/* ---- Connections hint anchors + difficulty swatches ---- */
+.conn-anchors { margin: 8px 0; text-align: center; }
+.conn-anchors__label {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.conn-anchors__chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.conn-anchor {
+  padding: 4px 8px;
+  font-size: var(--fs-xs);
+  color: var(--on-yellow);
+  border: 2px solid var(--shadow-ink);
+  box-shadow: var(--shadow-px-sm);
+}
+.conn-anchor__lvl { opacity: 0.75; }
+.conn-anchor--l0 { background: var(--conn-l0); }
+.conn-anchor--l1 { background: var(--conn-l1); }
+.conn-anchor--l2 { background: var(--conn-l2); }
+.conn-anchor--l3 { background: var(--conn-l3); }
+
+.swatch--l0 { background: var(--conn-l0); }
+.swatch--l1 { background: var(--conn-l1); }
+.swatch--l2 { background: var(--conn-l2); }
+.swatch--l3 { background: var(--conn-l3); }

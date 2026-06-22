@@ -1,12 +1,8 @@
 package com.eightbit.auth;
 
 import com.eightbit.auth.dto.AuthDtos.*;
-import com.eightbit.common.security.AuthUser;
 import jakarta.validation.Valid;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -18,26 +14,18 @@ public class AuthController {
         this.auth = auth;
     }
 
-    @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest req) {
-        return auth.register(req);
+    /**
+     * Step 1 for both sign-up and login (same details either way): email + roll + username.
+     * A one-time code is emailed; finish at /auth/verify-code.
+     */
+    @PostMapping("/start")
+    public AuthResponse start(@Valid @RequestBody RequestCodeRequest req) {
+        return auth.start(req.email(), req.rollNumber(), req.username());
     }
 
-    @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest req) {
-        return auth.login(req);
-    }
-
-    @PostMapping("/verify-otp")
-    public Map<String, Object> verifyOtp(@Valid @RequestBody VerifyOtpRequest req,
-                                         @AuthenticationPrincipal AuthUser user) {
-        auth.verifyOtp(user.id(), req.code());
-        return Map.of("verified", true);
-    }
-
-    @PostMapping("/resend-otp")
-    public Map<String, Object> resendOtp(@AuthenticationPrincipal AuthUser user) {
-        auth.resendOtp(user.id());
-        return Map.of("sent", true);
+    /** Login step 2: exchange the emailed code for a token. */
+    @PostMapping("/verify-code")
+    public AuthResponse verifyCode(@Valid @RequestBody VerifyCodeRequest req) {
+        return auth.verifyCode(req.email(), req.code());
     }
 }

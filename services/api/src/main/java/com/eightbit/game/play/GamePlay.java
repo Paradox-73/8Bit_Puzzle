@@ -1,5 +1,6 @@
 package com.eightbit.game.play;
 
+import com.eightbit.common.web.ApiException;
 import com.eightbit.game.Attempt;
 import com.eightbit.game.Puzzle;
 
@@ -35,6 +36,15 @@ public interface GamePlay {
     /** Fields safe to reveal only once the round is over (e.g. the Wordle answer). */
     default Map<String, Object> reveal(Puzzle puzzle, Attempt attempt) {
         return Map.of();
+    }
+
+    /**
+     * Reveal a single hint of the given kind ("vowel" or "consonant"), mutating {@code attempt.hints}
+     * and returning the revealed hint. At most one of each kind may be revealed, so a hint can never
+     * expose the whole word. Games that don't support hints throw by default.
+     */
+    default Map<String, Object> hint(Puzzle puzzle, Attempt attempt, String kind) {
+        throw ApiException.badRequest("HINTS_NOT_SUPPORTED", "Hints aren't available for this game");
     }
 
     /** Result of applying one move: game-specific response fields plus solved/gameOver flags. */

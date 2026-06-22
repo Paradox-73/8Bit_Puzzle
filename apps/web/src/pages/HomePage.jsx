@@ -4,7 +4,6 @@ import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import BatchWarBar from '../components/BatchWarBar.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
-import VerifyEmailBanner from '../components/VerifyEmailBanner.jsx';
 
 const STATUS_CTA = {
   NOT_STARTED: 'Play today’s puzzle',
@@ -16,9 +15,10 @@ const STATUS_CTA = {
 const GAMES = [
   { type: 'wordle', label: 'Wordle' },
   { type: 'connections', label: 'Connections' },
+  { type: 'cryptic', label: 'Cryptic' },
 ];
 
-const TITLES = { wordle: 'Wordle', connections: 'Connections' };
+const TITLES = { wordle: 'Wordle', connections: 'Connections', cryptic: 'Minute Cryptic' };
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -60,25 +60,23 @@ export default function HomePage() {
   }, [game]);
 
   const status = today?.status || 'NOT_STARTED';
-  const done = status === 'SOLVED' || status === 'FAILED';
   const playTo = game === 'wordle' ? '/play' : `/play?game=${game}`;
 
+  const diff = today?.difficulty != null && <> · difficulty {today.difficulty}/5</>;
   const meta =
-    game === 'connections'
-      ? today && (
-          <p className="hero__meta">
-            {today.config?.groupCount || 4} groups ·{' '}
-            {today.config?.maxMistakes || 4} mistakes
-            {today.difficulty != null && <> · difficulty {today.difficulty}/5</>}
-          </p>
-        )
-      : today && (
-          <p className="hero__meta">
-            {today.config?.wordLength || 5} letters ·{' '}
-            {today.config?.maxGuesses || 6} guesses
-            {today.difficulty != null && <> · difficulty {today.difficulty}/5</>}
-          </p>
-        );
+    !today ? null : game === 'connections' ? (
+      <p className="hero__meta">
+        {today.config?.groupCount || 4} groups · {today.config?.maxMistakes || 4} mistakes{diff}
+      </p>
+    ) : game === 'cryptic' ? (
+      <p className="hero__meta">
+        1 cryptic clue · {today.config?.maxGuesses || 6} tries{diff}
+      </p>
+    ) : (
+      <p className="hero__meta">
+        {today.config?.wordLength || 5} letters · {today.config?.maxGuesses || 6} guesses{diff}
+      </p>
+    );
 
   return (
     <div className="page page--home">
@@ -91,8 +89,6 @@ export default function HomePage() {
           <ThemeToggle />
         </div>
       </header>
-
-      <VerifyEmailBanner />
 
       <div className="segmented" role="tablist" aria-label="Choose game">
         {GAMES.map((g) => (
@@ -124,7 +120,7 @@ export default function HomePage() {
             <p className="hero__meta">
               {game === 'wordle'
                 ? 'No Wordle puzzle today — check back tomorrow.'
-                : 'No Connections puzzle today — play Wordle instead.'}
+                : `No ${TITLES[game]} puzzle today — play Wordle instead.`}
             </p>
             {game !== 'wordle' && (
               <Link className="btn btn--primary btn--block btn--lg" to="/play">
@@ -152,10 +148,6 @@ export default function HomePage() {
             <Link className="btn btn--primary btn--block btn--lg" to={playTo}>
               {STATUS_CTA[status] || 'Play'}
             </Link>
-
-            {done && today?.score != null && (
-              <p className="hero__score">Score: {today.score}</p>
-            )}
           </>
         )}
       </section>

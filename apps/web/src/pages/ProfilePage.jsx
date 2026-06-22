@@ -4,6 +4,8 @@ import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
 import PushToggle from '../components/PushToggle.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import FeedbackModal from '../components/FeedbackModal.jsx';
+import HelpModal from '../components/HelpModal.jsx';
 
 function StatBox({ label, value }) {
   return (
@@ -14,11 +16,48 @@ function StatBox({ label, value }) {
   );
 }
 
+// NYT-style horizontal guess distribution (Wordle wins by number of guesses).
+function GuessDistribution({ dist }) {
+  if (!Array.isArray(dist) || dist.length === 0) return null;
+  const total = dist.reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    return (
+      <section className="titles">
+        <h2 className="section-title">Guess distribution</h2>
+        <p className="profile-meta">Solve a Wordle to start your distribution.</p>
+      </section>
+    );
+  }
+  const max = Math.max(...dist, 1);
+  return (
+    <section className="titles">
+      <h2 className="section-title">Guess distribution</h2>
+      <div className="dist">
+        {dist.map((count, i) => (
+          <div className="dist-row" key={i}>
+            <span className="dist-row__label">{i + 1}</span>
+            <div className="dist-row__track">
+              <div
+                className="dist-row__bar"
+                style={{ width: `${Math.max(8, (count / max) * 100)}%` }}
+              >
+                <span className="dist-row__count">{count}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [feedbackType, setFeedbackType] = useState(null); // 'feedback' | 'bug' | null
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -57,6 +96,13 @@ export default function ProfilePage() {
         <div className="loading">Loading…</div>
       ) : (
         <>
+          {stats.flagged && (
+            <div className="warn-banner" role="alert">
+              🙂 A friendly reminder to play fair and solve the puzzles yourself — it keeps the
+              leaderboards fun and meaningful for everyone.
+            </div>
+          )}
+
           <section className="streak-banner">
             <div className="streak-banner__main">
               🔥 <span className="streak-banner__num">{stats.currentStreak ?? 0}</span>
@@ -72,6 +118,8 @@ export default function ProfilePage() {
             <StatBox label="Played" value={stats.totalPlayed ?? 0} />
             <StatBox label="Solved" value={stats.totalSolved ?? 0} />
           </section>
+
+          <GuessDistribution dist={stats.guessDistribution} />
 
           {Array.isArray(stats.titles) && stats.titles.length > 0 && (
             <section className="titles">
@@ -102,10 +150,30 @@ export default function ProfilePage() {
             <PushToggle />
           </section>
 
+          <section className="settings">
+            <h2 className="section-title">Help &amp; feedback</h2>
+            <div className="help-links">
+              <button className="btn btn--ghost btn--block" onClick={() => setShowHelp(true)}>
+                ❓ How to play
+              </button>
+              <button className="btn btn--ghost btn--block" onClick={() => setFeedbackType('feedback')}>
+                💡 Send feedback
+              </button>
+              <button className="btn btn--ghost btn--block" onClick={() => setFeedbackType('bug')}>
+                🐞 Report a bug
+              </button>
+            </div>
+          </section>
+
           <button className="btn btn--ghost btn--block logout-btn" onClick={logout}>
             Log out
           </button>
         </>
+      )}
+
+      {showHelp && <HelpModal game="wordle" onClose={() => setShowHelp(false)} />}
+      {feedbackType && (
+        <FeedbackModal initialType={feedbackType} onClose={() => setFeedbackType(null)} />
       )}
     </div>
   );

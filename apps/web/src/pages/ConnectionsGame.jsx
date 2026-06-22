@@ -39,6 +39,8 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState(null);
   const [streak, setStreak] = useState(null);
+  const [hints, setHints] = useState(initialPuzzle.hints || []);
+  const [hinting, setHinting] = useState(false);
 
   const groupSize = puzzle?.config?.groupSize || 4;
   const maxMistakes = puzzle?.config?.maxMistakes || 4;
@@ -102,6 +104,24 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
   const doShuffle = useCallback(() => {
     setTiles((t) => shuffle(t));
   }, []);
+
+  const revealHint = useCallback(async () => {
+    if (hinting || isOver || hints.length > 0) return;
+    setHinting(true);
+    try {
+      const res = await api.hint(puzzle.puzzleId, 'anchors');
+      setHints(res.hints || []);
+    } catch (err) {
+      toast(
+        err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
+        { type: 'warn' }
+      );
+    } finally {
+      setHinting(false);
+    }
+  }, [hinting, isOver, hints, puzzle, toast]);
+
+  const LEVEL_NAMES = ['Yellow', 'Green', 'Blue', 'Purple'];
 
   const triggerShake = useCallback(() => {
     setShake(true);
@@ -203,6 +223,23 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
         </span>
       </div>
 
+      {hints.length > 0 && (
+        <div className="conn-anchors">
+          <span className="conn-anchors__label">One word per group:</span>
+          <div className="conn-anchors__chips">
+            {hints
+              .slice()
+              .sort((a, b) => (a.level ?? 0) - (b.level ?? 0))
+              .map((h) => (
+                <span key={h.word} className={'conn-anchor conn-anchor--l' + (h.level ?? 0)}>
+                  {h.word}
+                  <span className="conn-anchor__lvl"> · {LEVEL_NAMES[h.level ?? 0]}</span>
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+
       <ConnectionsBoard
         tiles={tiles}
         solvedGroups={solvedGroups}
@@ -234,6 +271,13 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
             disabled={submitting || selected.length === 0}
           >
             ✕ Deselect all
+          </button>
+          <button
+            className="btn btn--ghost"
+            onClick={revealHint}
+            disabled={hinting || hints.length > 0}
+          >
+            💡 Hint
           </button>
           <button
             className="btn btn--primary"

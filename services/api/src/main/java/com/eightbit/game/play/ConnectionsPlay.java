@@ -6,6 +6,7 @@ import com.eightbit.game.Puzzle;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Connections: 16 tiles, sort into four hidden groups of four. Server-authoritative — the grouping
@@ -115,7 +116,31 @@ public class ConnectionsPlay implements GamePlay {
         view.put("mistakesUsed", st.mistakes());
         view.put("mistakesRemaining", Math.max(0, MAX_MISTAKES - st.mistakes()));
         view.put("guesses", history);
+        view.put("hints", attempt == null ? List.of() : attempt.getHints());
         return view;
+    }
+
+    /**
+     * One-shot hint: reveal a single word from each still-unsolved group, tagged with its colour
+     * level (yellow→purple). Gives the player one anchor per group without naming the category.
+     */
+    @Override
+    public Map<String, Object> hint(Puzzle p, Attempt attempt, String kind) {
+        if (!attempt.getHints().isEmpty()) {
+            return Map.of("kind", "anchors", "anchors", attempt.getHints());
+        }
+        List<Group> groups = groups(p);
+        State st = replay(groups, attempt.getGuesses());
+        for (int i = 0; i < groups.size(); i++) {
+            if (st.solved().contains(i)) continue;
+            Group g = groups.get(i);
+            String word = g.members().get(ThreadLocalRandom.current().nextInt(g.members().size()));
+            Map<String, Object> anchor = new LinkedHashMap<>();
+            anchor.put("level", g.level());
+            anchor.put("word", word);
+            attempt.getHints().add(anchor);
+        }
+        return Map.of("kind", "anchors", "anchors", attempt.getHints());
     }
 
     /** {selection, correct, oneAway} for one selection. */

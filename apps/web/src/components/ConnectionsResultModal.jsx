@@ -5,7 +5,7 @@ import { useToast } from './Toast.jsx';
 // share using the server's emoji shareGrid (falls back to a simple summary).
 export default function ConnectionsResultModal({ result, streak, puzzle, onClose }) {
   const { toast } = useToast();
-  const { solved, score, shareGrid, solvedGroups = [] } = result;
+  const { solved, shareGrid, solvedGroups = [] } = result;
 
   const buildFallbackShare = () => {
     const max = puzzle?.config?.maxMistakes ?? 4;
@@ -46,8 +46,6 @@ export default function ConnectionsResultModal({ result, streak, puzzle, onClose
         <h2 className={'result-title ' + (solved ? 'result-title--win' : 'result-title--lose')}>
           {solved ? '✓ Solved!' : '✗ Out of guesses'}
         </h2>
-
-        {score != null && <div className="result-score">{score} pts</div>}
 
         {solvedGroups.length > 0 && (
           <div className="conn-solved-stack conn-solved-stack--result">

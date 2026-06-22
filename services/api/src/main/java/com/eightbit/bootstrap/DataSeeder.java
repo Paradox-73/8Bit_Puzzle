@@ -39,8 +39,10 @@ public class DataSeeder implements CommandLineRunner {
     // Demo editor identity. The password is env-overridable (SEED_EDITOR_PASSWORD) and seeding can
     // be turned off entirely in production (app.seed.enabled=false / SEED_ENABLED=false), so a
     // public repo never ships a working production editor login.
-    private static final String EDITOR_ROLL = "IMT2022999";
+    private static final String EDITOR_ROLL = "IMT2023999";
     private static final String EDITOR_USER = "editor";
+    // Passwordless login is by email, so the editor needs one. Used to log in as admin locally.
+    private static final String EDITOR_EMAIL = "editor@iiitb.ac.in";
 
     @Value("${app.seed.enabled:true}")
     private boolean seedEnabled;
@@ -87,23 +89,41 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedGameTypes() {
-        if (gameTypes.count() > 0) return;
-        gameTypes.save(new GameType("wordle", "Wordle", true));
-        gameTypes.save(new GameType("connections", "Connections", true));
-        gameTypes.save(new GameType("pixel", "Pixel Reveal", false));
-        gameTypes.save(new GameType("cipher", "Cipher / Decode", false));
-        log.info("Seeded game types");
+        // Idempotent per-type so new game types (e.g. cryptic) are added even on an existing DB.
+        ensureGameType("wordle", "Wordle", true);
+        ensureGameType("connections", "Connections", true);
+        ensureGameType("cryptic", "Minute Cryptic", true);
+        ensureGameType("pixel", "Pixel Reveal", false);
+        ensureGameType("cipher", "Cipher / Decode", false);
+    }
+
+    private void ensureGameType(String code, String displayName, boolean active) {
+        if (!gameTypes.existsById(code)) {
+            gameTypes.save(new GameType(code, displayName, active));
+            log.info("Seeded game type '{}'", code);
+        }
     }
 
     private void seedEditor() {
-        if (users.existsByUsername(EDITOR_USER)) return;
+        if (users.existsByUsername(EDITOR_USER)) {
+            // Backfill the login email on an editor seeded before passwordless auth.
+            users.findByUsername(EDITOR_USER).ifPresent(e -> {
+                if (e.getEmail() == null || e.getEmail().isBlank()) {
+                    e.setEmail(EDITOR_EMAIL);
+                    users.save(e);
+                    log.info("Backfilled editor email -> {}", EDITOR_EMAIL);
+                }
+            });
+            return;
+        }
         String pass = (editorPassword == null || editorPassword.isBlank())
                 ? generatePassword() : editorPassword;
         User e = new User();
         e.setRollNumber(EDITOR_ROLL);
         e.setUsername(EDITOR_USER);
+        e.setEmail(EDITOR_EMAIL);
         e.setPasswordHash(encoder.encode(pass));
-        e.setBatchYear(2022);
+        e.setBatchYear(2023);
         e.setProgram("iMTech");
         e.setRoles("ROLE_USER,ROLE_EDITOR,ROLE_ADMIN");
         e = users.save(e);
@@ -156,6 +176,7 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         seedConnections(editorId, today);
+        seedCryptic(editorId, today);
 
         if (puzzles.findEvergreen("wordle").isEmpty()) {
             for (String w : EVERGREEN_WORDS) {
@@ -223,6 +244,86 @@ public class DataSeeder implements CommandLineRunner {
         g.put("category", category);
         g.put("members", List.of(members));
         return g;
+    }
+
+    /**
+     * Beginner-friendly cryptic clues, one per day, rotating through the main devices (anagram,
+     * hidden, reversal, charade, container, deletion, homophone, double-definition). Each carries the
+     * three teaching hints (definition / indicator / fodder) plus the full parse shown on solve.
+     */
+    private void seedCryptic(Long editorId, LocalDate today) {
+        List<Map<String, Object>> clues = List.of(
+                cryptic("LISTEN", "(6)", "Pay attention to broken tinsel (6)",
+                        "Pay attention", "broken", "tinsel", "Anagram",
+                        "LISTEN ('pay attention') is an anagram (‘broken’) of TINSEL."),
+                cryptic("HEART", "(5)", "Some of the artistic core (5)",
+                        "core", "Some of", "the artistic", "Hidden word",
+                        "HEART is hidden inside 'tHE ARTistic'."),
+                cryptic("STRAW", "(5)", "Drinking tube made from warts sent back (5)",
+                        "Drinking tube", "sent back", "warts", "Reversal",
+                        "WARTS reversed ('sent back') spells STRAW."),
+                cryptic("CARPET", "(6)", "Vehicle's animal companion covers the floor (6)",
+                        "covers the floor", "build from parts", "CAR (vehicle) + PET (animal companion)",
+                        "Charade", "CAR (vehicle) + PET (animal companion) = CARPET."),
+                cryptic("STABLE", "(6)", "Steady, capable, framed by street (6)",
+                        "Steady", "framed by", "ABLE (capable) inside ST (street)", "Container",
+                        "ABLE ('capable') placed inside ST (abbrev. for street) = STABLE."),
+                cryptic("COLD", "(4)", "Chilly scold's head dropped (4)",
+                        "Chilly", "head dropped", "scold", "Deletion",
+                        "SCOLD with its head (first letter) dropped = COLD."),
+                cryptic("NIGHT", "(5)", "Reportedly a medieval warrior brings darkness (5)",
+                        "darkness", "Reportedly", "knight (medieval warrior)", "Homophone",
+                        "NIGHT sounds like KNIGHT ('medieval warrior') — 'reportedly' flags the homophone."),
+                cryptic("LEFT", "(4)", "Departed, but remaining (4)",
+                        "Departed / remaining", "two meanings", "—", "Double definition",
+                        "LEFT means both 'departed' and 'what remains' — two definitions in one."));
+
+        for (int i = 0; i < clues.size(); i++) {
+            LocalDate date = today.plusDays(i);
+            if (puzzles.findServableForDate("cryptic", date).isPresent()) continue;
+            Puzzle p = new Puzzle();
+            p.setGameType("cryptic");
+            p.setPublishDate(date);
+            p.setDifficulty(difficultyFor(date));
+            p.setContent(clues.get(i));
+            p.setStatus(PuzzleStatus.SCHEDULED);
+            p.setAuthorId(editorId);
+            p.setReviewerId(editorId);
+            try {
+                puzzles.save(p);
+            } catch (Exception dup) {
+                // unique (game_type, publish_date) -> already there, ignore
+            }
+        }
+
+        // Evergreen failsafe so there's always a cryptic to serve.
+        if (puzzles.findEvergreen("cryptic").isEmpty()) {
+            Puzzle p = new Puzzle();
+            p.setGameType("cryptic");
+            p.setPublishDate(null);
+            p.setDifficulty((short) 2);
+            p.setContent(clues.get(0));
+            p.setStatus(PuzzleStatus.EVERGREEN);
+            p.setAuthorId(editorId);
+            p.setReviewerId(editorId);
+            puzzles.save(p);
+        }
+        log.info("Seeded {} days of cryptic clues + evergreen failsafe", clues.size());
+    }
+
+    private Map<String, Object> cryptic(String answer, String enumeration, String clue,
+                                        String definition, String indicator, String fodder,
+                                        String device, String explanation) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("answer", answer);
+        m.put("enumeration", enumeration);
+        m.put("clue", clue);
+        m.put("definition", definition);
+        m.put("indicator", indicator);
+        m.put("fodder", fodder);
+        m.put("device", device);
+        m.put("explanation", explanation);
+        return m;
     }
 
     /** Easy on Monday, hardest on Friday/weekend (build doc section 2). */
