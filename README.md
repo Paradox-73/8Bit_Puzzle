@@ -41,7 +41,7 @@
 
 ## 1. Project Overview
 
-**8Bit Daily Puzzle** is a mobile-first **Progressive Web App (PWA)** that delivers a **daily puzzle** (Wordle and Connections) to students of IIITB. The hook is **hyper-local content** — campus lore and inside jokes a generic Wordle clone can't have — feeding a **campus-wide leaderboard** and a **batch-vs-batch "war"** on the homepage. An editorial team (the *8Bit Magazine* club) loads puzzles and hides easter eggs through an **admin CMS** with a two-reviewer workflow.
+**8Bit Daily Puzzle** is a mobile-first **Progressive Web App (PWA)** that delivers three **daily puzzles** (Wordle, Connections, and a Minute-Cryptic-style Cryptic) to students of IIITB. The hook is **hyper-local content** — campus lore and inside jokes a generic Wordle clone can't have — feeding a **campus-wide leaderboard** (combined + per game) and a **cohort-vs-cohort "Batch War"** (participation %) on the homepage. An editorial team (the *8Bit Magazine* club) loads puzzles and hides easter eggs through an **admin CMS** with a two-reviewer workflow.
 
 The engineering problem behind the game:
 
@@ -374,7 +374,7 @@ npm install
 npm run dev                   # → http://localhost:5173
 ```
 
-Register with an IIITB-style roll number (e.g. `IMT2023045`). Log in as the editor to reach `/admin`. Two games are seeded: **Wordle** (`/play`) and **Connections** (`/play?game=connections`).
+Register with an IIITB-style roll number (e.g. `IMT2023045`, or a branch code like `BC2026045`). Log in as the editor to reach `/admin`. Three games are seeded: **Wordle** (`/play`), **Connections** (`/play?game=connections`) and **Cryptic** (`/play?game=cryptic`).
 
 ---
 
@@ -396,7 +396,12 @@ All secrets are supplied via environment variables / `.env` files, which are **g
 | `SEED_EDITOR_PASSWORD` | *(blank → random)* | Pin the seeded editor password. |
 | `OTP_ENABLED` | `false` | Enable email-OTP verification (requires SMTP + `@iiitb.ac.in` emails). |
 | `OTP_TTL_MINUTES` / `OTP_LENGTH` | `10` / `6` | OTP code lifetime and length. |
-| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | *(blank)* | SMTP relay; if blank, OTP codes are **logged** instead of emailed. |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | *(blank)* | SMTP relay; if blank, OTP codes are **logged** instead of emailed. Prod uses Gmail SMTP (`smtp.gmail.com:587`, app password). |
+| `OTP_FROM` | `8bit@iiitb.ac.in` | `From:` address on OTP emails. Must be a sender your relay accepts (Gmail: the authenticated account). |
+| `OTP_EMAIL_DOMAIN` | `iiitb.ac.in` | Restrict sign-ups to this email domain (keeps cohort scores honest). |
+| `ADMIN_LOGIN_CODE` | *(blank)* | Master code editors/admins may type instead of an emailed OTP, so email issues never lock them out. |
+| `SITE_DOMAIN` | *(blank)* | Public HTTPS domain for the VM; Caddy auto-fetches a Let's Encrypt cert for it. |
+| `app.batchwar.cohorts` | *(empty)* | Cohort capacities (program + year + size) used to normalise Batch War participation %. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | *(blank → push disabled)* | Web Push VAPID keypair. |
 | `VITE_API_BASE` | `http://localhost:8080` | Frontend → backend base URL. |
 | `VITE_LEADERBOARD_BASE` | *(defaults to API base)* | Optional separate leaderboard base. |
@@ -439,15 +444,16 @@ k6 run -e BASE=http://localhost:8088 infra/loadtest/midnight-spike.js
 
 ## 10. Features
 
-- **Two games, one engine seam.** Wordle and Connections behind a `GamePlay` strategy interface; the content schema and interface are designed to accommodate additional game types.
-- **Server-authoritative anti-cheat.** Answer never leaves the server; scoring is server-side; replays blocked by a unique constraint; fast-solve auto-flagging with an editor audit endpoint.
-- **Redis sorted-set leaderboards.** Campus + per-batch, daily + all-time, with a batch-vs-batch "war" (average score, ≥3-participant floor).
-- **Event-driven, extractable leaderboard.** One config flag switches between in-process and a Redis-Stream-backed standalone microservice with a durable consumer group.
-- **Roll-number auth.** Login by roll number, batch parsed from it; stateless JWT; role-gated `/admin/**`.
-- **Editorial CMS.** Two-reviewer workflow, calendar with gap/buffer warnings, evergreen failsafe, easter eggs.
-- **PWA.** Installable, offline-for-today (stale-while-revalidate), Web Push subscription plumbing, retro pixel theme with light/dark + colourblind-safe tile symbols.
+- **Three games, one engine seam.** Wordle, Connections, and Cryptic behind a `GamePlay` strategy interface; a new game type is a content schema + a class, not a rewrite. (Cryptic's answer entry uses Wordle-style letter cells sized to the clue's enumeration.)
+- **Server-authoritative anti-cheat.** Answers never leave the server until game-over; scoring is server-side; replays blocked by a unique constraint; fast-solve auto-flagging with an editor audit endpoint.
+- **Combined + per-game leaderboards.** Redis sorted sets for campus + cohort, daily + all-time, plus a **Total** board that *unions the three games on read* (so it reflects whatever you've actually played). A segmented filter switches Total / Wordle / Connections / Cryptic.
+- **Cohort Batch Wars.** Batch-vs-batch by **participation %** = distinct solvers ÷ batch capacity, grouped by **program + year** (BTech CSE ’26, iMTech ECE ’26, …), so a 30-seat batch isn't out-muscled by a 120-seat one. Capacities are config-driven.
+- **Passwordless college login.** Email + roll number + username; a one-time code is emailed (Gmail SMTP); stateless JWT; the roll number decodes batch year **and program/branch** (config-driven regex + map). Unfinished signups can resume without ever locking the user out.
+- **Editorial CMS for all three games.** Two-reviewer workflow, calendar with gap/buffer warnings, evergreen failsafe, easter eggs; per-game authoring forms with server-side content validation.
+- **PWA.** Installable (with an in-app install prompt on the profile), offline-for-today (stale-while-revalidate), Web Push plumbing, a viewport-sized board that fits without scrolling, retro pixel theme with light/dark + colourblind-safe symbols.
+- **Shareable results.** Emoji grid (or the cryptic clue) + a play link and Batch-War call-to-action — and never the answer.
 - **Streaks & titles.** Persisted streaks and earned titles (*First Blood*, *Library Ghost*, *Streak Keeper*).
-- **Lean ops story.** Single small VM behind a Cloudflare Tunnel + static hosting for the PWA; tuned JVM heaps (`-Xmx512m` + `-Xmx384m`) so both services fit comfortably.
+- **Lean cloud ops.** Single small VM behind **Caddy** (auto-HTTPS via Let's Encrypt) with managed **Neon** Postgres + **Upstash** Redis; the React PWA on **Vercel**. Event-driven leaderboard still extractable to a standalone service via one config flag.
 - **Observability + load test.** Prometheus/Grafana dashboard and a k6 midnight-spike test to 1000 VUs.
 
 ---
@@ -487,7 +493,7 @@ The system is engineered so the read and write hot paths stay cheap under the mi
 | **Redis Sorted Set (ZSET)** | A score-ordered set; `ZADD` writes, `ZREVRANGE`/`ZREVRANK` read top-N / a member's rank in O(log N). |
 | **Redis Stream + consumer group** | An append-only log (`XADD`) read by a named group; un-acked messages are redelivered, making the midnight burst durable. |
 | **VAPID** | Voluntary Application Server Identification — the keypair that authorises Web Push messages. |
-| **Batch war** | Batch-vs-batch ranking by average score (verified accounts only, ≥3-participant floor). |
+| **Batch war** | Cohort-vs-cohort ranking by **participation %** (distinct solvers ÷ batch capacity), grouped by program + year; verified accounts only. |
 | **Evergreen puzzle** | A no-date failsafe puzzle picked deterministically when editors leave a calendar gap. |
 | **Strategy pattern (`GamePlay`)** | One interface (`WordlePlay`, `ConnectionsPlay`) so new games are content + a class, not a rewrite. |
 | **Fixed-window rate limiter** | `INCR` a per-time-slot Redis key with TTL; reject once the count exceeds the limit. |

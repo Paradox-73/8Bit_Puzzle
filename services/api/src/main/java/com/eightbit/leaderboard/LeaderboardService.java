@@ -41,14 +41,20 @@ public class LeaderboardService {
 
     // --- key builders ---
     private String dailyCampus(String type, LocalDate d) { return "lb:" + type + ":" + d + ":campus"; }
-    private String dailyBatch(String type, LocalDate d, int year) { return "lb:" + type + ":" + d + ":batch:" + year; }
+    private String dailyBatch(String type, LocalDate d, String cohort) { return "lb:" + type + ":" + d + ":batch:" + cohort; }
     private String allTimeCampus(String type) { return "lb:" + type + ":alltime:campus"; }
-    private String allTimeBatch(String type, int year) { return "lb:" + type + ":alltime:batch:" + year; }
-    private String batchStats(String type, LocalDate d) { return "lb:" + type + ":" + d + ":batchstats"; }
+    private String allTimeBatch(String type, String cohort) { return "lb:" + type + ":alltime:batch:" + cohort; }
 
-    private String boardKey(String type, boolean batch, boolean allTime, LocalDate d, int year) {
+    /** "My Batch" boards are scoped to the player's cohort = program + year (e.g. "BTech CSE|2026"). */
+    private String cohortOf(long userId, int fallbackYear) {
+        return users.findById(userId)
+                .map(u -> (u.getProgram() == null ? "?" : u.getProgram()) + "|" + u.getBatchYear())
+                .orElse("?|" + fallbackYear);
+    }
+
+    private String boardKey(String type, boolean batch, boolean allTime, LocalDate d, String cohort) {
         return batch
-                ? (allTime ? allTimeBatch(type, year) : dailyBatch(type, d, year))
+                ? (allTime ? allTimeBatch(type, cohort) : dailyBatch(type, d, cohort))
                 : (allTime ? allTimeCampus(type) : dailyCampus(type, d));
     }
 
@@ -67,16 +73,12 @@ public class LeaderboardService {
         redis.expire(dailyCampus(type, date), DAILY_TTL);
         z.incrementScore(allTimeCampus(type), uid, score);
 
-        // Batch boards + batch-war only count verified accounts (anti batch-stuffing).
+        // Batch boards only count verified accounts (anti batch-stuffing). Scoped to the cohort.
         if (verified) {
-            z.add(dailyBatch(type, date, batchYear), uid, score);
-            redis.expire(dailyBatch(type, date, batchYear), DAILY_TTL);
-            z.incrementScore(allTimeBatch(type, batchYear), uid, score);
-
-            var h = redis.opsForHash();
-            h.increment(batchStats(type, date), batchYear + ":sum", score);
-            h.increment(batchStats(type, date), batchYear + ":count", 1);
-            redis.expire(batchStats(type, date), DAILY_TTL);
+            String cohort = cohortOf(userId, batchYear);
+            z.add(dailyBatch(type, date, cohort), uid, score);
+            redis.expire(dailyBatch(type, date, cohort), DAILY_TTL);
+            z.incrementScore(allTimeBatch(type, cohort), uid, score);
         }
     }
 
@@ -84,19 +86,20 @@ public class LeaderboardService {
         LocalDate date = LocalDate.now(GameService.ZONE);
         boolean batch = "batch".equalsIgnoreCase(scope);
         boolean allTime = "alltime".equalsIgnoreCase(window);
+        String cohort = batch ? cohortOf(userId, callerBatch) : null;
 
         String key;
         if (COMBINED.equals(type)) {
             // Sum the three per-game boards on read, so "Total" reflects whatever games each player
             // has actually played (one game or all three) — with no separate combined writes/backfill.
             List<String> src = GAMES.stream()
-                    .map(g -> boardKey(g, batch, allTime, date, callerBatch))
+                    .map(g -> boardKey(g, batch, allTime, date, cohort))
                     .toList();
-            key = boardKey(COMBINED, batch, allTime, date, callerBatch);
+            key = boardKey(COMBINED, batch, allTime, date, cohort);
             redis.opsForZSet().unionAndStore(src.get(0), src.subList(1, src.size()), key);
             redis.expire(key, COMBINED_TTL);
         } else {
-            key = boardKey(type, batch, allTime, date, callerBatch);
+            key = boardKey(type, batch, allTime, date, cohort);
         }
 
         Set<TypedTuple<String>> top = redis.opsForZSet().reverseRangeWithScores(key, 0, TOP_N - 1);
