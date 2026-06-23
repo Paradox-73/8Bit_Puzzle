@@ -1743,6 +1743,64 @@ input[type='range'] {
 }
 .hint-menu .hint-chips { margin-top: 4px; }
 
+/* ---- Leaderboard filters ---- */
+.lb-games { margin-bottom: 12px; }
+/* 4 segments incl. "Connections" — shrink the type so they fit one row on phones. */
+.lb-games .seg { font-size: 0.58rem; padding: 0 2px; white-space: nowrap; }
+.lb-filter-row { display: flex; gap: 8px; align-items: stretch; }
+.lb-filter-row > * { flex: 1; margin: 0; }
+
+/* ---- Admin authoring (Connections / Cryptic) ---- */
+.conn-editor { display: flex; flex-direction: column; gap: 12px; }
+.conn-group {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conn-group__legend { font-family: var(--font-display); font-size: 0.6rem; padding: 0 6px; }
+.conn-words { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cryptic-editor { display: flex; flex-direction: column; gap: 10px; }
+.cryptic-editor textarea.input { resize: vertical; font-family: var(--font-body); line-height: 1.4; }
+
+/* ---- Cryptic letter-box answer (gameplay) ---- */
+.cryptic-answer-form { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.cryptic-answer { position: relative; display: inline-flex; justify-content: center; cursor: text; }
+/* A real input sits invisibly over the cells so typing + the mobile keyboard still work. */
+.cryptic-hidden-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  font-size: 16px; /* keeps iOS from zooming the page on focus */
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+}
+.cryptic-cells { display: flex; flex-wrap: wrap; gap: min(3vw, 12px); justify-content: center; }
+.cryptic-cell-group { display: flex; gap: min(1.5vw, 6px); }
+.cryptic-cell {
+  width: clamp(28px, 9vw, 40px);
+  height: clamp(34px, 11vw, 48px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  font-family: var(--font-display);
+  font-size: clamp(0.8rem, 4vw, 1.1rem);
+  text-transform: uppercase;
+  box-shadow: var(--shadow-px-sm);
+}
+.cryptic-cell--filled { border-color: var(--accent); }
+.cryptic-cell--active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
 /* ---- Hint bar (Wordle + Cryptic) ---- */
 .hint-bar { margin: 12px 0; }
 .hint-bar__buttons {

@@ -39,6 +39,17 @@ public class LeaderboardService {
     private String allTimeBatch(String type, int year) { return "lb:" + type + ":alltime:batch:" + year; }
     private String batchStats(String type, LocalDate d) { return "lb:" + type + ":" + d + ":batchstats"; }
 
+    private String boardKey(String type, boolean batch, boolean allTime, LocalDate d, int year) {
+        return batch
+                ? (allTime ? allTimeBatch(type, year) : dailyBatch(type, d, year))
+                : (allTime ? allTimeCampus(type) : dailyCampus(type, d));
+    }
+
+    /** Combined cross-game board: built by unioning the per-game boards on read (no backfill needed). */
+    public static final String COMBINED = "all";
+    private static final List<String> GAMES = List.of("wordle", "connections", "cryptic");
+    private static final Duration COMBINED_TTL = Duration.ofSeconds(120);
+
     /** Called by the leaderboard listener after a puzzle is completed. */
     public void record(String type, LocalDate date, long userId, int batchYear, int score, boolean verified) {
         String uid = String.valueOf(userId);
@@ -67,9 +78,19 @@ public class LeaderboardService {
         boolean batch = "batch".equalsIgnoreCase(scope);
         boolean allTime = "alltime".equalsIgnoreCase(window);
 
-        String key = batch
-                ? (allTime ? allTimeBatch(type, callerBatch) : dailyBatch(type, date, callerBatch))
-                : (allTime ? allTimeCampus(type) : dailyCampus(type, date));
+        String key;
+        if (COMBINED.equals(type)) {
+            // Sum the three per-game boards on read, so "Total" reflects whatever games each player
+            // has actually played (one game or all three) — with no separate combined writes/backfill.
+            List<String> src = GAMES.stream()
+                    .map(g -> boardKey(g, batch, allTime, date, callerBatch))
+                    .toList();
+            key = boardKey(COMBINED, batch, allTime, date, callerBatch);
+            redis.opsForZSet().unionAndStore(src.get(0), src.subList(1, src.size()), key);
+            redis.expire(key, COMBINED_TTL);
+        } else {
+            key = boardKey(type, batch, allTime, date, callerBatch);
+        }
 
         Set<TypedTuple<String>> top = redis.opsForZSet().reverseRangeWithScores(key, 0, TOP_N - 1);
         List<Map<String, Object>> entries = new ArrayList<>();
@@ -110,17 +131,19 @@ public class LeaderboardService {
     /** The homepage hero: average score per participating player, per batch. */
     public Map<String, Object> batchWar(String type) {
         LocalDate date = LocalDate.now(GameService.ZONE);
-        Map<Object, Object> raw = redis.opsForHash().entries(batchStats(type, date));
+        List<String> types = COMBINED.equals(type) ? GAMES : List.of(type);
 
         Map<Integer, long[]> agg = new HashMap<>(); // year -> [sum, count]
-        for (var en : raw.entrySet()) {
-            String field = en.getKey().toString();        // "2023:sum" / "2023:count"
-            int sep = field.indexOf(':');
-            int year = Integer.parseInt(field.substring(0, sep));
-            String which = field.substring(sep + 1);
-            long val = Long.parseLong(en.getValue().toString());
-            long[] sc = agg.computeIfAbsent(year, k -> new long[2]);
-            if (which.equals("sum")) sc[0] = val; else sc[1] = val;
+        for (String t : types) {
+            for (var en : redis.opsForHash().entries(batchStats(t, date)).entrySet()) {
+                String field = en.getKey().toString();    // "2023:sum" / "2023:count"
+                int sep = field.indexOf(':');
+                int year = Integer.parseInt(field.substring(0, sep));
+                String which = field.substring(sep + 1);
+                long val = Long.parseLong(en.getValue().toString());
+                long[] sc = agg.computeIfAbsent(year, k -> new long[2]);
+                if (which.equals("sum")) sc[0] += val; else sc[1] += val;
+            }
         }
 
         List<Map<String, Object>> batches = new ArrayList<>();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -9,6 +9,16 @@ const HINT_KINDS = [
   { kind: 'indicator', label: 'Indicator' },
   { kind: 'fodder', label: 'Fodder' },
 ];
+
+// "(6)" -> [6], "(3,4)" -> [3,4], "(4-2)" -> [4,2]. Each number is a word's letter count.
+function parseEnumeration(enumeration) {
+  if (!enumeration) return [];
+  return String(enumeration)
+    .replace(/[()\s]/g, '')
+    .split(/[,\-/]/)
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isInteger(n) && n > 0);
+}
 
 // Build a result object (with cryptic parse) from a finished puzzle/guess payload.
 function toResult(src, status) {
@@ -48,6 +58,28 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
   );
 
   const maxGuesses = puzzle?.config?.maxGuesses || 6;
+
+  // Letter-box answer entry sized to the enumeration, e.g. "(3,4)" -> [3,4] (7 cells in two groups).
+  const segments = useMemo(() => parseEnumeration(puzzle.enumeration), [puzzle.enumeration]);
+  const total = useMemo(() => segments.reduce((a, b) => a + b, 0), [segments]);
+  const groups = useMemo(() => {
+    let start = 0;
+    return segments.map((len) => {
+      const g = { start, len };
+      start += len;
+      return g;
+    });
+  }, [segments]);
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef(null);
+
+  const onType = useCallback(
+    (e) => {
+      const letters = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, total);
+      setCurrent(letters);
+    },
+    [total]
+  );
 
   const isOver = useMemo(() => {
     const s = puzzle?.status;
@@ -157,17 +189,60 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
 
       {!isOver && (
         <>
-          <form className="cryptic-input-row" onSubmit={submitGuess}>
-            <input
-              className="cryptic-input"
-              type="text"
-              autoComplete="off"
-              autoCapitalize="characters"
-              placeholder="Your answer"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-              disabled={submitting}
-            />
+          <form className="cryptic-answer-form" onSubmit={submitGuess}>
+            {total > 0 ? (
+              <div className="cryptic-answer" onClick={() => inputRef.current?.focus()}>
+                <input
+                  ref={inputRef}
+                  className="cryptic-hidden-input"
+                  value={current}
+                  onChange={onType}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  maxLength={total}
+                  inputMode="text"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  disabled={submitting}
+                  aria-label="Type your answer"
+                />
+                <div className="cryptic-cells" aria-hidden="true">
+                  {groups.map((g, gi) => (
+                    <div className="cryptic-cell-group" key={gi}>
+                      {Array.from({ length: g.len }).map((_, li) => {
+                        const idx = g.start + li;
+                        const active = focused && idx === current.length;
+                        return (
+                          <span
+                            key={li}
+                            className={
+                              'cryptic-cell' +
+                              (current[idx] ? ' cryptic-cell--filled' : '') +
+                              (active ? ' cryptic-cell--active' : '')
+                            }
+                          >
+                            {current[idx] || ''}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <input
+                className="cryptic-input"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                placeholder="Your answer"
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+                disabled={submitting}
+              />
+            )}
             <button className="btn btn--primary" type="submit" disabled={submitting}>
               Guess
             </button>

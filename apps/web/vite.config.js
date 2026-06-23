@@ -8,8 +8,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // We provide our own icons (svg placeholder); do not auto-generate.
-      includeAssets: ['icons/icon.svg'],
+      // We provide our own icon (logo.png); do not auto-generate.
+      includeAssets: ['logo.png'],
       manifest: {
         name: '8Bit Daily Puzzle',
         short_name: '8Bit',
@@ -21,30 +21,9 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         icons: [
-          // SVG placeholder works as a "any" icon across modern browsers.
-          // Drop real PNGs into public/icons and uncomment the PNG entries below.
-          {
-            src: '/icons/icon.svg',
-            sizes: '192x192',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'maskable',
-          },
-          // --- Real PNG icons (recommended for production) ---
-          // { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          // { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          // { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/logo.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/logo.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/logo.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

@@ -61,19 +61,14 @@ public class WordleEngine {
      * Server-side scoring. Hard to game: the client never submits a score, only its moves.
      *  - base for solving
      *  - bonus for fewer guesses
-     *  - small, CAPPED time bonus so a fast human is rewarded but a bot solving in 80ms gains nothing extra
      *  - streak multiplier, capped
+     * No time bonus: solving speed shouldn't decide the score (it also penalised slow connections).
      */
-    public int score(boolean solved, int guessesUsed, long completionMs, int currentStreak) {
+    public int score(boolean solved, int guessesUsed, int currentStreak) {
         if (!solved) return 0;
         int base = 1000;
         int guessBonus = (MAX_GUESSES - guessesUsed) * 120;     // 0..600
-
-        // Reward solving within ~2 minutes, capped; floor at 0. No reward for sub-2s "solves".
-        long seconds = Math.max(2, completionMs / 1000);
-        int timeBonus = (int) Math.max(0, Math.min(120, (120 - seconds) * 2));
-
         double streakMult = Math.min(1.5, 1.0 + currentStreak * 0.02);
-        return (int) Math.round((base + guessBonus + timeBonus) * streakMult);
+        return (int) Math.round((base + guessBonus) * streakMult);
     }
 }

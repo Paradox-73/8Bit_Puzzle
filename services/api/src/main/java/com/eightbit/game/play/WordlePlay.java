@@ -108,8 +108,7 @@ public class WordlePlay implements GamePlay {
     @Override
     public int score(Puzzle p, Attempt a, int currentStreak) {
         boolean solved = Boolean.TRUE.equals(a.getSolved());
-        long ms = a.getCompletionMs() == null ? 0 : a.getCompletionMs();
-        return engine.score(solved, a.getGuesses().size(), ms, currentStreak);
+        return engine.score(solved, a.getGuesses().size(), currentStreak);
     }
 
     @Override
