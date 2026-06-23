@@ -1007,6 +1007,8 @@ input[type='range'] {
   position: relative;
   width: 100%;
   max-width: 360px;
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
   background: var(--bg-elev);
   border: 4px solid var(--accent);
   border-radius: var(--radius);
@@ -1717,9 +1719,18 @@ input[type='range'] {
 .hint-chip__kind { color: var(--text-dim); }
 
 /* ---- Help modal ---- */
-.modal--help { max-width: 480px; text-align: left; }
-.help-tabs { margin: 10px 0 14px; }
-.help-body { font-size: var(--fs-sm); line-height: 1.45; }
+/* Cap the box at the viewport and let only the body scroll, so the title +
+   close (✕) button stay pinned and reachable on tall content (Connections/Cryptic). */
+.modal--help { max-width: 480px; text-align: left; overflow: hidden; }
+.help-tabs { margin: 10px 0 14px; flex-shrink: 0; }
+.help-body {
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-self: stretch;
+}
 .help-section p { margin: 8px 0; }
 .help-list { list-style: none; padding: 0; margin: 8px 0; }
 .help-list li { margin: 8px 0; padding-left: 4px; line-height: 1.4; }

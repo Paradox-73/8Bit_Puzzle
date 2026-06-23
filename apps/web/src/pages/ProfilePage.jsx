@@ -5,7 +5,6 @@ import { useToast } from '../components/Toast.jsx';
 import PushToggle from '../components/PushToggle.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import FeedbackModal from '../components/FeedbackModal.jsx';
-import HelpModal from '../components/HelpModal.jsx';
 
 function StatBox({ label, value }) {
   return (
@@ -57,7 +56,6 @@ export default function ProfilePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [feedbackType, setFeedbackType] = useState(null); // 'feedback' | 'bug' | null
-  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -153,9 +151,6 @@ export default function ProfilePage() {
           <section className="settings">
             <h2 className="section-title">Help &amp; feedback</h2>
             <div className="help-links">
-              <button className="btn btn--ghost btn--block" onClick={() => setShowHelp(true)}>
-                ❓ How to play
-              </button>
               <button className="btn btn--ghost btn--block" onClick={() => setFeedbackType('feedback')}>
                 💡 Send feedback
               </button>
@@ -171,7 +166,6 @@ export default function ProfilePage() {
         </>
       )}
 
-      {showHelp && <HelpModal game="wordle" onClose={() => setShowHelp(false)} />}
       {feedbackType && (
         <FeedbackModal initialType={feedbackType} onClose={() => setFeedbackType(null)} />
       )}
