@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useToast } from './Toast.jsx';
+import { withShareFooter } from '../share.js';
 
 export default function ResultModal({ result, streak, puzzle, onClose }) {
   const { toast } = useToast();
@@ -21,7 +22,7 @@ export default function ResultModal({ result, streak, puzzle, onClose }) {
   };
 
   const share = async () => {
-    const text = shareGrid || buildFallbackShare();
+    const text = withShareFooter(shareGrid || buildFallbackShare());
     try {
       if (navigator.share) {
         await navigator.share({ text });

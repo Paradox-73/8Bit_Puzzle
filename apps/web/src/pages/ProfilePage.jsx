@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast.jsx';
 import PushToggle from '../components/PushToggle.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import FeedbackModal from '../components/FeedbackModal.jsx';
+import { useInstallPrompt } from '../pwa.js';
 
 function StatBox({ label, value }) {
   return (
@@ -56,6 +57,7 @@ export default function ProfilePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [feedbackType, setFeedbackType] = useState(null); // 'feedback' | 'bug' | null
+  const { installed, canPrompt, isIos, promptInstall } = useInstallPrompt();
 
   useEffect(() => {
     let alive = true;
@@ -129,6 +131,33 @@ export default function ProfilePage() {
                   </span>
                 ))}
               </div>
+            </section>
+          )}
+
+          {!installed && (
+            <section className="settings">
+              <h2 className="section-title">📲 Install the game</h2>
+              {canPrompt ? (
+                <div className="push-row">
+                  <div className="push-row__text">
+                    <span>Add 8Bit to your home screen</span>
+                    <span className="push-row__sub">One-tap daily play, works offline.</span>
+                  </div>
+                  <button className="btn btn--primary" onClick={promptInstall}>
+                    Install
+                  </button>
+                </div>
+              ) : isIos ? (
+                <p className="push-row__sub">
+                  Tap <strong>Share</strong> <span aria-hidden="true">⎙</span> then{' '}
+                  <strong>Add to Home Screen</strong> to install 8Bit.
+                </p>
+              ) : (
+                <p className="push-row__sub">
+                  Open your browser menu and choose <strong>Install app</strong> /{' '}
+                  <strong>Add to Home screen</strong>.
+                </p>
+              )}
             </section>
           )}
 

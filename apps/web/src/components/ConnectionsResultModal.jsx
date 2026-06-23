@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useToast } from './Toast.jsx';
+import { withShareFooter } from '../share.js';
 
 // Result modal for Connections. Reveals all solved groups and offers a one-tap
 // share using the server's emoji shareGrid (falls back to a simple summary).
@@ -14,7 +15,7 @@ export default function ConnectionsResultModal({ result, streak, puzzle, onClose
   };
 
   const share = async () => {
-    const text = shareGrid || buildFallbackShare();
+    const text = withShareFooter(shareGrid || buildFallbackShare());
     try {
       if (navigator.share) {
         await navigator.share({ text });
