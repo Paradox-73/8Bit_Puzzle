@@ -110,13 +110,19 @@ spring.mail:
 
 rollnumber:
   # Confirm the exact IIITB scheme before launch; this is config-driven so no redeploy needed.
-  pattern: "^(IMT|MT|MS|PH|DT)(\\d{4})(\\d{3,4})$"
+  pattern: "^(IMT|MT|MS|PH|DT|IC|BC|IE|BE|BA|BT)(\\d{4})(\\d{3,4})$"
   program-map:
     IMT: iMTech
     MT: MTech
     MS: MSc
     PH: PhD
     DT: Dual
+    IC: iMTech CSE
+    BC: BTech CSE
+    IE: iMTech ECE
+    BE: BTech ECE
+    BA: BTech AI & DS
+    BT: BTech
 
 logging:
   level:
