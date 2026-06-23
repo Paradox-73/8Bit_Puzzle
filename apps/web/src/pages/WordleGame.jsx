@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -7,9 +8,62 @@ import Keyboard, { computeKeyStates } from '../components/Keyboard.jsx';
 import ResultModal from '../components/ResultModal.jsx';
 import EasterEggModal from '../components/EasterEggModal.jsx';
 
+// Compact 💡 hint control that lives in the page header next to the "?". Tapping
+// it opens a small popover with the reveal buttons + any letters already revealed.
+function WordleHintMenu({ hints, hinting, hasHint, onReveal }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="hint-menu-wrap">
+      <button
+        className="help-btn hint-btn"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Get a hint"
+        title="Get a hint"
+        aria-expanded={open}
+      >
+        💡
+        {hints.length > 0 && <span className="hint-btn__badge">{hints.length}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="hint-menu-backdrop" onClick={() => setOpen(false)} />
+          <div className="hint-menu" role="menu">
+            <p className="hint-menu__title">Reveal a letter</p>
+            <button
+              className="btn btn--small btn--ghost btn--block"
+              onClick={() => onReveal('vowel')}
+              disabled={hinting || hasHint('vowel')}
+            >
+              💡 Reveal a vowel
+            </button>
+            <button
+              className="btn btn--small btn--ghost btn--block"
+              onClick={() => onReveal('consonant')}
+              disabled={hinting || hasHint('consonant')}
+            >
+              💡 Reveal a consonant
+            </button>
+            {hints.length > 0 && (
+              <div className="hint-chips">
+                {hints.map((h) => (
+                  <span key={h.kind} className={'hint-chip hint-chip--' + h.kind}>
+                    Contains <strong>{h.letter}</strong>
+                    <span className="hint-chip__kind"> ({h.kind})</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // The Wordle game. Receives the already-loaded /today payload plus a reload fn
 // so the parent PlayPage owns fetching for whichever game type is selected.
-export default function WordleGame({ puzzle: initialPuzzle, reload }) {
+// headerSlot is the header DOM node to portal the 💡 hint control into.
+export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }) {
   const { toast } = useToast();
   const { refreshUser } = useAuth();
 
@@ -186,6 +240,18 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
 
   return (
     <>
+      {!isOver &&
+        headerSlot &&
+        createPortal(
+          <WordleHintMenu
+            hints={hints}
+            hinting={hinting}
+            hasHint={hasHint}
+            onReveal={revealHint}
+          />,
+          headerSlot
+        )}
+
       {warning && (
         <div className="warn-banner" role="alert">
           ⚠️ {warning}
@@ -199,37 +265,6 @@ export default function WordleGame({ puzzle: initialPuzzle, reload }) {
         maxGuesses={maxGuesses}
         shakeRow={shake}
       />
-
-      {!isOver && (
-        <div className="hint-bar">
-          <div className="hint-bar__buttons">
-            <button
-              className="btn btn--small btn--ghost"
-              onClick={() => revealHint('vowel')}
-              disabled={hinting || hasHint('vowel')}
-            >
-              💡 Reveal a vowel
-            </button>
-            <button
-              className="btn btn--small btn--ghost"
-              onClick={() => revealHint('consonant')}
-              disabled={hinting || hasHint('consonant')}
-            >
-              💡 Reveal a consonant
-            </button>
-          </div>
-          {hints.length > 0 && (
-            <div className="hint-chips">
-              {hints.map((h) => (
-                <span key={h.kind} className={'hint-chip hint-chip--' + h.kind}>
-                  Contains <strong>{h.letter}</strong>
-                  <span className="hint-chip__kind"> ({h.kind})</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {isOver && !showResult && (
         <button className="btn btn--primary" onClick={() => setShowResult(true)}>

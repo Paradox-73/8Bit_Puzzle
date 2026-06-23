@@ -35,6 +35,9 @@ export default function PlayPage() {
   const [loading, setLoading] = useState(true);
   const [noPuzzle, setNoPuzzle] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // DOM node in the header that Wordle portals its 💡 hint control into, so the
+  // hint lives next to the "?" instead of taking a row below the grid.
+  const [headerSlot, setHeaderSlot] = useState(null);
   const hasHelp = HELP_GAMES.has(game);
 
   const load = useCallback(async () => {
@@ -99,6 +102,7 @@ export default function PlayPage() {
         <h2 className="play-title">{TITLES[game]}</h2>
         <div className="play-header__right">
           {puzzle?.date && <span className="play-sub">{puzzle.date}</span>}
+          <span className="hint-slot" ref={setHeaderSlot} />
           {hasHelp && (
             <button
               className="help-btn"
@@ -138,7 +142,7 @@ export default function PlayPage() {
       )}
 
       {!loading && puzzle && puzzle.gameType !== 'connections' && puzzle.gameType !== 'cryptic' && (
-        <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+        <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
       )}
 
       {showHelp && (

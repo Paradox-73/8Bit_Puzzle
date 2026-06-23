@@ -637,6 +637,7 @@ input[type='range'] {
 /* ---------- Wordle grid ---------- */
 .page--play {
   align-items: center;
+  gap: 12px;
 }
 .play-header {
   text-align: center;
@@ -1693,6 +1694,49 @@ input[type='range'] {
   box-shadow: var(--shadow-px-sm);
 }
 .help-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Header 💡 hint control (Wordle) ---- */
+.hint-slot { display: inline-flex; }
+.hint-menu-wrap { position: relative; display: inline-flex; }
+.hint-btn { position: relative; line-height: 1; }
+.hint-btn__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  background: var(--accent);
+  color: var(--on-fill);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+}
+.hint-menu-backdrop { position: fixed; inset: 0; z-index: 90; }
+.hint-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-elev);
+  border: 3px solid var(--accent);
+  box-shadow: var(--shadow-px);
+  text-align: left;
+}
+.hint-menu__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+.hint-menu .hint-chips { margin-top: 4px; }
 
 /* ---- Hint bar (Wordle + Cryptic) ---- */
 .hint-bar { margin: 12px 0; }
