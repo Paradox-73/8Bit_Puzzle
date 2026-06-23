@@ -13,12 +13,14 @@ public class AppProperties {
     private final Vapid vapid = new Vapid();
     private final Content content = new Content();
     private final Otp otp = new Otp();
+    private final BatchWar batchWar = new BatchWar();
 
     public Jwt getJwt() { return jwt; }
     public Cors getCors() { return cors; }
     public Vapid getVapid() { return vapid; }
     public Content getContent() { return content; }
     public Otp getOtp() { return otp; }
+    public BatchWar getBatchWar() { return batchWar; }
 
     public static class Jwt {
         private String secret;
@@ -78,5 +80,24 @@ public class AppProperties {
         public void setEmailDomain(String v) { this.emailDomain = v; }
         public String getFromAddress() { return fromAddress; }
         public void setFromAddress(String v) { this.fromAddress = v; }
+    }
+
+    /** Cohort sizes for Batch War participation %, keyed by program + batch year. */
+    public static class BatchWar {
+        private java.util.List<Cohort> cohorts = new java.util.ArrayList<>();
+        public java.util.List<Cohort> getCohorts() { return cohorts; }
+        public void setCohorts(java.util.List<Cohort> c) { this.cohorts = c; }
+
+        public static class Cohort {
+            private String program;
+            private int year;
+            private int capacity;
+            public String getProgram() { return program; }
+            public void setProgram(String v) { this.program = v; }
+            public int getYear() { return year; }
+            public void setYear(int v) { this.year = v; }
+            public int getCapacity() { return capacity; }
+            public void setCapacity(int v) { this.capacity = v; }
+        }
     }
 }

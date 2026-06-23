@@ -42,3 +42,8 @@ Thumbs.db
 .claude/
 LAUNCH-GUIDE.md
 INTERVIEW_STUDY_GUIDE.md
+wordle.txt
+# Puzzle answer drafts for review — NEVER commit (answers would leak)
+puzzles-review.json
+puzzles-*.json
+*.puzzles.json

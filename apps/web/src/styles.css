@@ -1801,6 +1801,35 @@ input[type='range'] {
 .cryptic-cell--filled { border-color: var(--accent); }
 .cryptic-cell--active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 
+/* ---- Batch War rows (participation %) ---- */
+.batchwar__rows { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.bw-row { display: flex; align-items: center; gap: 8px; }
+.bw-row__label {
+  flex: 0 0 38%;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bw-row__track {
+  flex: 1;
+  height: 18px;
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  position: relative;
+}
+.bw-row__bar {
+  height: 100%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  transition: width 0.3s ease;
+}
+.bw-row__bar--leader { background: var(--green); }
+.bw-row__pct { font-size: 10px; padding: 0 4px; color: var(--on-fill); font-family: var(--font-body); }
+.bw-row__count { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-dim); }
+.batchwar__nudge { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--text-dim); }
+
 /* ---- Hint bar (Wordle + Cryptic) ---- */
 .hint-bar { margin: 12px 0; }
 .hint-bar__buttons {

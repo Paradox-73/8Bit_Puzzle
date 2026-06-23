@@ -20,13 +20,22 @@ function parseEnumeration(enumeration) {
     .filter((n) => Number.isInteger(n) && n > 0);
 }
 
+// Cryptic share = the clue sentence (which already ends in the enumeration, e.g. "(6)") plus your
+// X/6 line. Deliberately NOT a Wordle-style grid, and it NEVER includes the answer.
+function crypticShareText(solved, used, clue) {
+  const n = solved ? used : 'X';
+  return `8Bit Cryptic • IIITB • ${n}/6\n${clue || ''}`.trim();
+}
+
 // Build a result object (with cryptic parse) from a finished puzzle/guess payload.
-function toResult(src, status) {
+function toResult(src, status, clue) {
+  const solved = status === 'SOLVED';
+  const used = src.guessesUsed ?? (Array.isArray(src.guesses) ? src.guesses.length : 0);
   return {
-    solved: status === 'SOLVED',
+    solved,
     score: src.score,
     answer: src.answer,
-    shareGrid: src.shareGrid || null,
+    shareGrid: crypticShareText(solved, used, clue),
     status,
     parse: {
       definition: src.definition,
@@ -53,7 +62,7 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState(() =>
     initialPuzzle.status === 'SOLVED' || initialPuzzle.status === 'FAILED'
-      ? toResult(initialPuzzle, initialPuzzle.status)
+      ? toResult(initialPuzzle, initialPuzzle.status, initialPuzzle.clue)
       : null
   );
 
@@ -137,7 +146,7 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
         if (res.gameOver) {
           const status = res.solved ? 'SOLVED' : 'FAILED';
           setPuzzle((p) => ({ ...p, status }));
-          setResult(toResult(res, status));
+          setResult(toResult(res, status, puzzle.clue));
           setShowResult(true);
         } else if (res.correct === false) {
           toast('Not quite — try again', { type: 'warn', duration: 1400 });

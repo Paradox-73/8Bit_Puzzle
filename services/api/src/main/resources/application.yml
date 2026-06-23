@@ -97,6 +97,16 @@ app:
     email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
     from-address: ${OTP_FROM:8bit@iiitb.ac.in}
 
+  # Cohort sizes for Batch War participation % (distinct solvers ÷ capacity). Program names must
+  # match the rollnumber program-map exactly. Add other years' cohorts here as they join.
+  batchwar:
+    cohorts:
+      - { program: "BTech CSE", year: 2026, capacity: 120 }
+      - { program: "BTech ECE", year: 2026, capacity: 30 }
+      - { program: "BTech AI & DS", year: 2026, capacity: 90 }
+      - { program: "iMTech CSE", year: 2026, capacity: 60 }
+      - { program: "iMTech ECE", year: 2026, capacity: 60 }
+
 # SMTP is optional: if spring.mail.host is unset, OTP codes are written to the logs instead of
 # emailed (fine for dev). For launch, point these at a free Brevo/Resend SMTP relay via env.
 spring.mail:

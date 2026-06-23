@@ -2,6 +2,8 @@ package com.eightbit.leaderboard;
 
 import com.eightbit.auth.User;
 import com.eightbit.auth.UserRepository;
+import com.eightbit.common.config.AppProperties;
+import com.eightbit.game.AttemptRepository;
 import com.eightbit.game.GameService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
@@ -26,10 +28,15 @@ public class LeaderboardService {
 
     private final StringRedisTemplate redis;
     private final UserRepository users;
+    private final AttemptRepository attempts;
+    private final AppProperties props;
 
-    public LeaderboardService(StringRedisTemplate redis, UserRepository users) {
+    public LeaderboardService(StringRedisTemplate redis, UserRepository users,
+                              AttemptRepository attempts, AppProperties props) {
         this.redis = redis;
         this.users = users;
+        this.attempts = attempts;
+        this.props = props;
     }
 
     // --- key builders ---
@@ -128,49 +135,49 @@ public class LeaderboardService {
         return out;
     }
 
-    /** The homepage hero: average score per participating player, per batch. */
+    /** The homepage hero: each cohort's participation % (distinct solvers ÷ capacity) for today,
+     *  so small batches aren't out-muscled by big ones — it rewards getting your batch to play. */
     public Map<String, Object> batchWar(String type) {
         LocalDate date = LocalDate.now(GameService.ZONE);
-        List<String> types = COMBINED.equals(type) ? GAMES : List.of(type);
 
-        Map<Integer, long[]> agg = new HashMap<>(); // year -> [sum, count]
-        for (String t : types) {
-            for (var en : redis.opsForHash().entries(batchStats(t, date)).entrySet()) {
-                String field = en.getKey().toString();    // "2023:sum" / "2023:count"
-                int sep = field.indexOf(':');
-                int year = Integer.parseInt(field.substring(0, sep));
-                String which = field.substring(sep + 1);
-                long val = Long.parseLong(en.getValue().toString());
-                long[] sc = agg.computeIfAbsent(year, k -> new long[2]);
-                if (which.equals("sum")) sc[0] += val; else sc[1] += val;
-            }
+        Map<String, Long> solvedBy = new HashMap<>(); // "program|year" -> distinct solvers today
+        for (Object[] r : attempts.solversByCohort(date, type)) {
+            String program = r[0] == null ? "" : r[0].toString();
+            int year = ((Number) r[1]).intValue();
+            long solvers = ((Number) r[2]).longValue();
+            solvedBy.put(program + "|" + year, solvers);
         }
 
-        List<Map<String, Object>> batches = new ArrayList<>();
-        Integer leader = null;
-        double bestAvg = -1;
-        for (var en : agg.entrySet()) {
-            long sum = en.getValue()[0];
-            long count = en.getValue()[1];
-            double avg = count == 0 ? 0 : (double) sum / count;
-            Map<String, Object> b = new LinkedHashMap<>();
-            b.put("batchYear", en.getKey());
-            b.put("avgScore", Math.round(avg));
-            b.put("players", count);
-            b.put("totalScore", sum);
-            batches.add(b);
-            if (count >= MIN_PARTICIPANTS && avg > bestAvg) {
-                bestAvg = avg;
-                leader = en.getKey();
+        List<Map<String, Object>> cohorts = new ArrayList<>();
+        String leader = null;
+        double bestPct = -1;
+        for (AppProperties.BatchWar.Cohort c : props.getBatchWar().getCohorts()) {
+            long solved = solvedBy.getOrDefault(c.getProgram() + "|" + c.getYear(), 0L);
+            int cap = Math.max(1, c.getCapacity());
+            int pct = (int) Math.min(100, Math.round((double) solved / cap * 100.0));
+            String yy = String.valueOf(c.getYear());
+            String label = c.getProgram() + " '" + (yy.length() >= 2 ? yy.substring(yy.length() - 2) : yy);
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("program", c.getProgram());
+            m.put("year", c.getYear());
+            m.put("label", label);
+            m.put("solvers", solved);
+            m.put("capacity", c.getCapacity());
+            m.put("pct", pct);
+            cohorts.add(m);
+
+            if (solved > 0 && pct > bestPct) {
+                bestPct = pct;
+                leader = label;
             }
         }
-        batches.sort((a, b) -> Long.compare((long) b.get("avgScore"), (long) a.get("avgScore")));
+        cohorts.sort((a, b) -> Integer.compare((Integer) b.get("pct"), (Integer) a.get("pct")));
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("date", date.toString());
-        out.put("batches", batches);
+        out.put("cohorts", cohorts);
         out.put("leader", leader);
-        out.put("minParticipants", MIN_PARTICIPANTS);
         return out;
     }
 }

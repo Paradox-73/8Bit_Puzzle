@@ -63,16 +63,45 @@ public class AuthService {
         }
         User existing = users.findByEmail(email).orElse(null);
         if (existing != null) {
-            // Returning user: roll + username must match this email's account.
-            String roll = rollParser.normalize(rawRoll);
-            String username = rawUsername == null ? "" : rawUsername.trim();
-            if (!existing.getRollNumber().equalsIgnoreCase(roll)
-                    || !existing.getUsername().equalsIgnoreCase(username)) {
-                throw ApiException.unauthorized("BAD_DETAILS", "Those details don't match this email");
+            if (existing.isEmailVerified()) {
+                // Verified account: roll + username must match, so nobody can hijack it.
+                String roll = rollParser.normalize(rawRoll);
+                String username = rawUsername == null ? "" : rawUsername.trim();
+                if (!existing.getRollNumber().equalsIgnoreCase(roll)
+                        || !existing.getUsername().equalsIgnoreCase(username)) {
+                    throw ApiException.unauthorized("BAD_DETAILS", "Those details don't match this email");
+                }
+                return startSession(existing);
             }
-            return startSession(existing);
+            // Unverified: a signup that never finished its OTP. Let them re-enter (possibly corrected)
+            // details and just re-send the code, so an incomplete first attempt never locks them out.
+            return resumeUnverified(existing, rawRoll, rawUsername);
         }
         return createAccount(email, rawRoll, rawUsername);
+    }
+
+    /** Re-validate + update an unfinished signup's details, then re-send the OTP. */
+    private AuthResponse resumeUnverified(User u, String rawRoll, String rawUsername) {
+        String roll = rollParser.normalize(rawRoll);
+        RollNumberParser.Parsed parsed = rollParser.parse(roll); // validates the roll format
+        String username = rawUsername == null ? "" : rawUsername.trim();
+        if (!username.matches("^[A-Za-z0-9_]{3,30}$")) {
+            throw ApiException.badRequest("BAD_USERNAME",
+                    "Username must be 3–30 letters, numbers or underscore");
+        }
+        // Only clash-check against OTHER accounts (this unverified one may already hold these values).
+        if (!roll.equalsIgnoreCase(u.getRollNumber()) && users.existsByRollNumber(roll)) {
+            throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
+        }
+        if (!username.equalsIgnoreCase(u.getUsername()) && users.existsByUsername(username)) {
+            throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
+        }
+        u.setRollNumber(roll);
+        u.setUsername(username);
+        u.setBatchYear(parsed.batchYear());
+        u.setProgram(parsed.program());
+        users.save(u);
+        return startSession(u);
     }
 
     private AuthResponse createAccount(String email, String rawRoll, String rawUsername) {

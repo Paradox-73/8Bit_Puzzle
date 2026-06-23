@@ -89,11 +89,18 @@ export async function request(path, opts = {}) {
   }
 
   if (res.status === 401) {
-    if (onUnauthorized) onUnauthorized();
-    throw new ApiError('Session expired. Please log in again.', {
-      status: 401,
-      code: 'UNAUTHORIZED',
-    });
+    // A 401 only means "session expired" if we actually sent a token. For public calls
+    // (e.g. the login form's /auth/start with no token), let the server's real error
+    // message through instead of hijacking it with a generic "session expired".
+    const hadToken = auth && !!getToken();
+    if (hadToken) {
+      if (onUnauthorized) onUnauthorized();
+      throw new ApiError('Session expired. Please log in again.', {
+        status: 401,
+        code: 'UNAUTHORIZED',
+      });
+    }
+    // else: fall through so the real error (e.g. "Those details don't match this email") surfaces.
   }
 
   // Global rate-limit handling so any page can toast it.
