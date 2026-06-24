@@ -172,17 +172,27 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* Only render the board once the loaded puzzle's type matches the selected tab, so the old
-          puzzle never lingers under the new one while switching. */}
-      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === game && (
-        game === 'connections' ? (
-          <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
-        ) : game === 'cryptic' ? (
-          <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
-        ) : (
-          <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
-        )
-      )}
+      {/* The board lives in a wrapper keyed by `game`. This is load-bearing: the board is the one
+          child whose component type AND key both change on a tab switch, and it sits among sibling
+          blocks (trial banner, loading, empty states) that toggle on/off mid-load. React reconciles
+          that keyed element against those toggling unkeyed siblings positionally and can fail to
+          unmount it — leaving the previous game's grid/keyboard orphaned in the DOM while the new
+          board renders below it (the "new puzzle comes below and doesn't switch" bug, worse on slow
+          networks where the loading window is longer; a full refresh hid it). Keying the wrapper by
+          `game` forces React to drop the whole previous-game subtree on every switch.
+          The wrapper is `display:contents` so it adds no layout box (see styles.css). The inner
+          puzzleId key still remounts within a game, e.g. the trial "Next puzzle" walk. */}
+      <div className="game-mount" key={game}>
+        {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === game && (
+          game === 'connections' ? (
+            <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+          ) : game === 'cryptic' ? (
+            <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+          ) : (
+            <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
+          )
+        )}
+      </div>
 
       {puzzle?.trial && !puzzle.trialDone && puzzle.puzzleId && (
         <TrialFeedback key={puzzle.puzzleId} puzzle={puzzle} />

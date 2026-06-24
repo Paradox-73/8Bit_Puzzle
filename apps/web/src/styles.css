@@ -802,6 +802,12 @@ input[type='range'] {
   align-items: center;
   gap: 1.4vh;
 }
+/* Keyed remount wrapper for the game board (see PlayPage.jsx). display:contents means it
+   generates no box, so the board's children stay direct flex items of .page--play and the
+   layout/gap is unchanged. */
+.game-mount {
+  display: contents;
+}
 .play-header {
   text-align: center;
 }
