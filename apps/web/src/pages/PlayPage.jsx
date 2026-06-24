@@ -6,6 +6,7 @@ import WordleGame from './WordleGame.jsx';
 import ConnectionsGame from './ConnectionsGame.jsx';
 import CrypticGame from './CrypticGame.jsx';
 import HelpModal from '../components/HelpModal.jsx';
+import TrialFeedback from '../components/TrialFeedback.jsx';
 
 // Supported games. Default is wordle. The selected game lives in the
 // ?game= query param so it is bookmarkable, e.g. /play?game=connections.
@@ -116,7 +117,39 @@ export default function PlayPage() {
         </div>
       </header>
 
+      {/* Heads-up when today's answer isn't a normal dictionary word (an IIITB term / brand / slang).
+          Wordle & Cryptic only — Connections tiles carry their own context in the category names. */}
+      {puzzle?.campusWord && (game === 'wordle' || game === 'cryptic') && (
+        <p className="campus-badge" title="Today's answer may not be in the dictionary">
+          🏫 Campus word — might not be in the dictionary
+        </p>
+      )}
+
+      {/* Pre-launch playtest: walk every puzzle back-to-back, no daily limit. Server-driven —
+          this only renders while trial mode is on, and disappears entirely once it's off. */}
+      {puzzle?.trial && !puzzle.trialDone && (
+        <div className="trial-banner">
+          <span className="trial-banner__tag">🧪 TRIAL</span>
+          <span className="trial-banner__progress">
+            Puzzle {puzzle.trialIndex} of {puzzle.trialTotal} · no daily limit
+          </span>
+          <button className="btn btn--small" onClick={load}>
+            Next puzzle →
+          </button>
+        </div>
+      )}
+
       {loading && <div className="loading">Loading puzzle…</div>}
+
+      {!loading && puzzle?.trialDone && (
+        <div className="empty">
+          <p>
+            {puzzle.trialTotal > 0
+              ? `🎉 You've played all ${puzzle.trialTotal} ${TITLES[game]} puzzles. Thanks for testing!`
+              : `No ${TITLES[game]} puzzles to test yet.`}
+          </p>
+        </div>
+      )}
 
       {!loading && noPuzzle && (
         <div className="empty conn-empty">
@@ -133,16 +166,21 @@ export default function PlayPage() {
         </div>
       )}
 
-      {!loading && puzzle && puzzle.gameType === 'connections' && (
+      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === 'connections' && (
         <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
       )}
 
-      {!loading && puzzle && puzzle.gameType === 'cryptic' && (
+      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === 'cryptic' && (
         <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
       )}
 
-      {!loading && puzzle && puzzle.gameType !== 'connections' && puzzle.gameType !== 'cryptic' && (
-        <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
+      {!loading && puzzle && !puzzle.trialDone &&
+        puzzle.gameType !== 'connections' && puzzle.gameType !== 'cryptic' && (
+          <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
+        )}
+
+      {puzzle?.trial && !puzzle.trialDone && puzzle.puzzleId && (
+        <TrialFeedback key={puzzle.puzzleId} puzzle={puzzle} />
       )}
 
       {showHelp && (

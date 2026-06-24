@@ -97,15 +97,47 @@ app:
     email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
     from-address: ${OTP_FROM:8bit@iiitb.ac.in}
 
+  # Pre-launch trial / playtest. OFF by default. When TRIAL_ENABLED=true, players solve every
+  # published puzzle one after another (no daily limit) so we can collect difficulty/timing stats
+  # before launch. Trial attempts never hit the leaderboard and are purged via /admin/trial/reset.
+  # The trial auto-stops the day after trial.end-date regardless, so it can't run into the 16 Jul launch.
+  trial:
+    enabled: ${TRIAL_ENABLED:false}
+    end-date: ${TRIAL_END_DATE:2026-07-10}
+    # The trial serves these under-review puzzles (wordle+connections+cryptic per day). Edits to the
+    # file are picked up live (on next request) — no redeploy. Set an absolute path in prod, e.g.
+    # TRIAL_PUZZLES_FILE=/app/puzzles-review.json. Resolved against the API's working directory if relative.
+    puzzles-file: ${TRIAL_PUZZLES_FILE:puzzles-review.json}
+    # Trial stats are snapshotted here (newest appended) so they outlive the pre-launch data purge —
+    # the real junior-play stats stay separate (trial=false). Set an absolute path in prod.
+    stats-file: ${TRIAL_STATS_FILE:trial-stats.json}
+
   # Cohort sizes for Batch War participation % (distinct solvers ÷ capacity). Program names must
-  # match the rollnumber program-map exactly. Add other years' cohorts here as they join.
+  # match the rollnumber program-map exactly. Capacities are rough estimates: if more verified
+  # students than this solve, the bar simply caps at 100% (never errors). Add the 2026 intake
+  # here once juniors arrive (16 Jul). Add other years' cohorts as they join.
   batchwar:
     cohorts:
+      # 2026 intake (juniors, arrive 16 Jul) — split programmes BC/IC/IE/BA/BE. Capacities below are
+      # placeholders mirroring 2025; the denominator auto-grows to the real headcount as they register,
+      # so these don't need to be exact. Update once intake numbers are confirmed.
       - { program: "BTech CSE", year: 2026, capacity: 120 }
+      - { program: "iMTech CSE", year: 2026, capacity: 30 }
+      - { program: "iMTech ECE", year: 2026, capacity: 30 }
+      - { program: "BTech AI & DS", year: 2026, capacity: 60 }
       - { program: "BTech ECE", year: 2026, capacity: 30 }
-      - { program: "BTech AI & DS", year: 2026, capacity: 90 }
-      - { program: "iMTech CSE", year: 2026, capacity: 60 }
-      - { program: "iMTech ECE", year: 2026, capacity: 60 }
+      # 2025 batch — split programmes (granular roll prefixes BC/IC/IE/BA/BE)
+      - { program: "BTech CSE", year: 2025, capacity: 120 }     # BC
+      - { program: "iMTech CSE", year: 2025, capacity: 30 }     # IC
+      - { program: "iMTech ECE", year: 2025, capacity: 30 }     # IE
+      - { program: "BTech AI & DS", year: 2025, capacity: 60 }  # BA
+      - { program: "BTech ECE", year: 2025, capacity: 30 }      # BE
+      # 2024 batch — unified iMTech + BTech (no CSE/ECE split)
+      - { program: "iMTech", year: 2024, capacity: 64 }         # IMT
+      - { program: "BTech", year: 2024, capacity: 215 }         # BT
+      # 2023 & 2022 batches — unified iMTech only (no CSE/ECE split)
+      - { program: "iMTech", year: 2023, capacity: 196 }        # IMT
+      - { program: "iMTech", year: 2022, capacity: 196 }        # IMT
 
 # SMTP is optional: if spring.mail.host is unset, OTP codes are written to the logs instead of
 # emailed (fine for dev). For launch, point these at a free Brevo/Resend SMTP relay via env.

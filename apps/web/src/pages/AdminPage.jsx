@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
+import TrialStats from '../components/TrialStats.jsx';
 
 // ---- date helpers (local, no deps) ----
 function ymOf(date) {
@@ -290,6 +291,8 @@ export default function AdminPage() {
   return (
     <div className="page page--admin">
       <h1 className="page-title">⚙ Admin · {gameLabel}</h1>
+
+      <TrialStats />
 
       <div className="segmented" role="tablist" aria-label="Choose game to manage">
         {GAMES.map((g) => (

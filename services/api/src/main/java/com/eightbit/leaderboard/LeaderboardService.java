@@ -138,9 +138,16 @@ public class LeaderboardService {
         return out;
     }
 
-    /** The homepage hero: each cohort's participation % (distinct solvers ÷ capacity) for today,
-     *  so small batches aren't out-muscled by big ones — it rewards getting your batch to play. */
-    public Map<String, Object> batchWar(String type) {
+    /**
+     * Each cohort's participation % (distinct solvers ÷ denominator) for today. Scoped to the
+     * viewer's own batch year, so an iMTech-2023 player sees the 2023 cohort(s) and a 2026 fresher
+     * sees only the 2026 programmes (BC/IC/IE/BA/BE) — the list never sprawls across years.
+     *
+     * The denominator is {@code max(configured estimate, registered users in the cohort)}: capacities
+     * are rough, so if more students register than the estimate the bar shows e.g. 200/200, never an
+     * over-100% "200/196" that reads like a bug or cheating.
+     */
+    public Map<String, Object> batchWar(String type, int viewerYear) {
         LocalDate date = LocalDate.now(GameService.ZONE);
 
         Map<String, Long> solvedBy = new HashMap<>(); // "program|year" -> distinct solvers today
@@ -151,13 +158,25 @@ public class LeaderboardService {
             solvedBy.put(program + "|" + year, solvers);
         }
 
+        Map<String, Long> registered = new HashMap<>(); // "program|year" -> users who signed up
+        for (Object[] r : users.countByCohort()) {
+            if (r[0] == null || r[1] == null) continue;
+            registered.put(r[0] + "|" + ((Number) r[1]).intValue(), ((Number) r[2]).longValue());
+        }
+
         List<Map<String, Object>> cohorts = new ArrayList<>();
         String leader = null;
         double bestPct = -1;
         for (AppProperties.BatchWar.Cohort c : props.getBatchWar().getCohorts()) {
-            long solved = solvedBy.getOrDefault(c.getProgram() + "|" + c.getYear(), 0L);
-            int cap = Math.max(1, c.getCapacity());
-            int pct = (int) Math.min(100, Math.round((double) solved / cap * 100.0));
+            // Only the viewer's own year (viewerYear<=0 means "show all", e.g. an unauthenticated peek).
+            if (viewerYear > 0 && c.getYear() != viewerYear) continue;
+
+            String key = c.getProgram() + "|" + c.getYear();
+            long solved = solvedBy.getOrDefault(key, 0L);
+            long reg = registered.getOrDefault(key, 0L);
+            // Denominator grows to the real headcount if registrations exceed the estimate.
+            int denom = Math.max(1, Math.max(c.getCapacity(), (int) reg));
+            int pct = (int) Math.min(100, Math.round((double) solved / denom * 100.0));
             String yy = String.valueOf(c.getYear());
             String label = c.getProgram() + " '" + (yy.length() >= 2 ? yy.substring(yy.length() - 2) : yy);
 
@@ -166,7 +185,7 @@ public class LeaderboardService {
             m.put("year", c.getYear());
             m.put("label", label);
             m.put("solvers", solved);
-            m.put("capacity", c.getCapacity());
+            m.put("capacity", denom);
             m.put("pct", pct);
             cohorts.add(m);
 

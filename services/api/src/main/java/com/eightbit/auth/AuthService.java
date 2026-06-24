@@ -93,7 +93,7 @@ public class AuthService {
         if (!roll.equalsIgnoreCase(u.getRollNumber()) && users.existsByRollNumber(roll)) {
             throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
         }
-        if (!username.equalsIgnoreCase(u.getUsername()) && users.existsByUsername(username)) {
+        if (!username.equalsIgnoreCase(u.getUsername()) && users.existsByUsernameIgnoreCase(username)) {
             throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
         }
         u.setRollNumber(roll);
@@ -120,7 +120,7 @@ public class AuthService {
         if (users.existsByRollNumber(roll)) {
             throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
         }
-        if (users.existsByUsername(username)) {
+        if (users.existsByUsernameIgnoreCase(username)) {
             throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
         }
 

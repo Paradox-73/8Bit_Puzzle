@@ -24,6 +24,17 @@ public interface PuzzleRepository extends JpaRepository<Puzzle, Long> {
             """)
     List<Puzzle> findEvergreen(@Param("type") String type);
 
+    /** TRIAL ONLY: the playtest puzzles (synced from puzzles-review.json), oldest day first. */
+    @Query("""
+            select p from Puzzle p
+            where p.gameType = :type and p.status = 'trial'
+            order by p.publishDate, p.id
+            """)
+    List<Puzzle> findTrialPool(@Param("type") String type);
+
+    /** All trial puzzles, for the file→DB sync (upsert + prune). */
+    List<Puzzle> findByStatus(String status);
+
     List<Puzzle> findByGameTypeAndPublishDateBetweenOrderByPublishDate(
             String gameType, LocalDate start, LocalDate end);
 

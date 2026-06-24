@@ -154,6 +154,9 @@ export const api = {
   // Reveal one hint. kind: 'vowel'|'consonant' (Wordle) or 'definition'|'indicator'|'fodder' (Cryptic).
   hint: (puzzleId, kind) =>
     request(`/puzzles/${puzzleId}/hint`, { method: 'POST', body: { kind } }),
+  // Trial-only: rate a puzzle 1–5 and/or leave a "what to change" note.
+  ratePuzzle: (puzzleId, rating, message) =>
+    request(`/puzzles/${puzzleId}/rate`, { method: 'POST', body: { rating, message } }),
 
   // FEEDBACK / BUG REPORTS
   feedback: ({ type, message, context }) =>
@@ -187,4 +190,11 @@ export const api = {
   adminApprove: (id) => request(`/admin/puzzles/${id}/approve`, { method: 'POST' }),
   adminSchedule: (id) => request(`/admin/puzzles/${id}/schedule`, { method: 'POST' }),
   adminDeletePuzzle: (id) => request(`/admin/puzzles/${id}`, { method: 'DELETE' }),
+
+  // ADMIN · TRIAL (pre-launch playtest stats; removable with trial mode)
+  // scope: 'trial' (playtesters) | 'live' (real junior play after launch) — kept separate.
+  adminTrialStats: (scope = 'trial') => request('/admin/trial/stats', { query: { scope } }),
+  adminTrialSync: () => request('/admin/trial/sync', { method: 'POST' }),
+  adminTrialExport: () => request('/admin/trial/export', { method: 'POST' }),
+  adminTrialReset: () => request('/admin/trial/reset', { method: 'POST' }),
 };

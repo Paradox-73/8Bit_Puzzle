@@ -12,6 +12,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByRollNumber(String rollNumber);
     boolean existsByUsername(String username);
+    boolean existsByUsernameIgnoreCase(String username);
     boolean existsByEmail(String email);
     List<User> findByIdIn(Collection<Long> ids);
+
+    /** Registered users grouped by cohort (program, batch year) — Batch War denominator. */
+    @org.springframework.data.jpa.repository.Query(
+            "select u.program, u.batchYear, count(u) from User u group by u.program, u.batchYear")
+    List<Object[]> countByCohort();
 }

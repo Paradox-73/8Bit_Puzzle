@@ -67,6 +67,21 @@ public class Attempt {
     @Column(name = "flag_reason", length = 200)
     private String flagReason;
 
+    /**
+     * Pre-launch playtest marker. Trial attempts are kept out of the leaderboard/streaks and are
+     * deleted wholesale before go-live (DELETE FROM attempts WHERE trial = true). Always false for
+     * real games. See {@link com.eightbit.common.config.AppProperties.Trial}.
+     */
+    @Column(nullable = false)
+    private boolean trial = false;
+
+    /** Trial playtest feedback: a 1–5 star rating and an optional "what to change" note. */
+    @Column
+    private Short rating;
+
+    @Column(length = 1000)
+    private String feedback;
+
     protected Attempt() {}
 
     public Attempt(Long userId, Long puzzleId) {
@@ -99,4 +114,10 @@ public class Attempt {
     public void setFlagged(boolean flagged) { this.flagged = flagged; }
     public String getFlagReason() { return flagReason; }
     public void setFlagReason(String flagReason) { this.flagReason = flagReason; }
+    public boolean isTrial() { return trial; }
+    public void setTrial(boolean trial) { this.trial = trial; }
+    public Short getRating() { return rating; }
+    public void setRating(Short rating) { this.rating = rating; }
+    public String getFeedback() { return feedback; }
+    public void setFeedback(String feedback) { this.feedback = feedback; }
 }

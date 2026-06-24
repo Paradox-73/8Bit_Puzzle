@@ -11,6 +11,9 @@ public final class PuzzleStatus {
     public static final String SCHEDULED = "scheduled";
     public static final String PUBLISHED = "published";
     public static final String EVERGREEN = "evergreen";
+    /** Pre-launch playtest puzzles, synced from puzzles-review.json. Never served by the real
+     *  daily flow; only the trial pool picks these up. Purged at go-live. */
+    public static final String TRIAL = "trial";
 
     private PuzzleStatus() {}
 }

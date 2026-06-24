@@ -37,7 +37,9 @@ public class LeaderboardController {
     }
 
     @GetMapping("/leaderboard/batch-war")
-    public Map<String, Object> batchWar(@RequestParam(defaultValue = "all") String type) {
-        return service.batchWar(safeType(type));
+    public Map<String, Object> batchWar(@RequestParam(defaultValue = "all") String type,
+                                        @AuthenticationPrincipal AuthUser user) {
+        int viewerYear = user == null || user.batchYear() == null ? 0 : user.batchYear();
+        return service.batchWar(safeType(type), viewerYear);
     }
 }

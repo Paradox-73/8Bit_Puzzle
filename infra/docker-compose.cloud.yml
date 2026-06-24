@@ -35,11 +35,23 @@ services:
       # --- Optional web push ---
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      # --- Pre-launch TRIAL (off unless TRIAL_ENABLED=true in infra/.env). Serves puzzles-review.json
+      #     (mounted below); stats snapshot to the trial_data volume so they survive the purge. ---
+      TRIAL_ENABLED: ${TRIAL_ENABLED:-false}
+      TRIAL_END_DATE: ${TRIAL_END_DATE:-2026-07-10}
+      TRIAL_PUZZLES_FILE: /app/trial/puzzles-review.json
+      TRIAL_STATS_FILE: /app/data/trial-stats.json
       # Heap capped for a 1 GB box.
       JAVA_OPTS: ${JAVA_OPTS:--Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m}
     # Exposed only to the VM's localhost (for debugging via curl); the internet reaches it via caddy.
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      # The under-review puzzle file is gitignored, so git never pulls it — copy it to
+      # infra/trial/puzzles-review.json on the VM (see TRIAL.md). A directory mount degrades
+      # gracefully if absent; edits are picked up live on the next request.
+      - ./trial:/app/trial:ro
+      - trial_data:/app/data
     restart: unless-stopped
 
   caddy:
@@ -60,3 +72,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  trial_data:   # persists trial-stats.json snapshots across container rebuilds
