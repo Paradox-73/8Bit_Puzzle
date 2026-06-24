@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api, ApiError } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
@@ -40,15 +40,21 @@ export default function PlayPage() {
   // hint lives next to the "?" instead of taking a row below the grid.
   const [headerSlot, setHeaderSlot] = useState(null);
   const hasHelp = HELP_GAMES.has(game);
+  // Tracks the game whose fetch is current, so a slow response from a tab you've since switched
+  // away from can't overwrite the new puzzle (the switch-leaves-old-puzzle bug, worse on mobile).
+  const reqGame = useRef(game);
 
   const load = useCallback(async () => {
+    reqGame.current = game;
     setLoading(true);
     setNoPuzzle(false);
     setPuzzle(null);
     try {
       const data = await api.getToday(game);
+      if (reqGame.current !== game) return; // superseded by a newer tab switch — drop this result
       setPuzzle(data);
     } catch (err) {
+      if (reqGame.current !== game) return;
       if (err instanceof ApiError) {
         if (err.code === 'NO_PUZZLE' || err.status === 404) {
           setNoPuzzle(true);
@@ -61,7 +67,7 @@ export default function PlayPage() {
         toast('Could not load today’s puzzle', { type: 'error' });
       }
     } finally {
-      setLoading(false);
+      if (reqGame.current === game) setLoading(false);
     }
   }, [game, toast]);
 
@@ -166,18 +172,17 @@ export default function PlayPage() {
         </div>
       )}
 
-      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === 'connections' && (
-        <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
-      )}
-
-      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === 'cryptic' && (
-        <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
-      )}
-
-      {!loading && puzzle && !puzzle.trialDone &&
-        puzzle.gameType !== 'connections' && puzzle.gameType !== 'cryptic' && (
+      {/* Only render the board once the loaded puzzle's type matches the selected tab, so the old
+          puzzle never lingers under the new one while switching. */}
+      {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === game && (
+        game === 'connections' ? (
+          <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+        ) : game === 'cryptic' ? (
+          <CrypticGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
+        ) : (
           <WordleGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} headerSlot={headerSlot} />
-        )}
+        )
+      )}
 
       {puzzle?.trial && !puzzle.trialDone && puzzle.puzzleId && (
         <TrialFeedback key={puzzle.puzzleId} puzzle={puzzle} />

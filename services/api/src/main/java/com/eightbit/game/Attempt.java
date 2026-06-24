@@ -1,6 +1,7 @@
 package com.eightbit.game;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -71,8 +72,12 @@ public class Attempt {
      * Pre-launch playtest marker. Trial attempts are kept out of the leaderboard/streaks and are
      * deleted wholesale before go-live (DELETE FROM attempts WHERE trial = true). Always false for
      * real games. See {@link com.eightbit.common.config.AppProperties.Trial}.
+     *
+     * ColumnDefault so {@code ddl-auto: update} can add this NOT NULL column to an attempts table that
+     * already has rows (Postgres rejects a NOT NULL add with no default on a non-empty table).
      */
     @Column(nullable = false)
+    @ColumnDefault("false")
     private boolean trial = false;
 
     /** Trial playtest feedback: a 1–5 star rating and an optional "what to change" note. */
