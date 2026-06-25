@@ -58,6 +58,20 @@ public interface AttemptRepository extends JpaRepository<Attempt, Long> {
             """, nativeQuery = true)
     List<Object[]> statsByUser(@Param("trial") boolean trial);
 
+    /** Trial leaderboard: total score per tester (across finished trial attempts), best first.
+     *  type "all" sums every game; otherwise just that game. Lets testers see each other's standings
+     *  during the playtest without touching the real Redis leaderboard. */
+    @Query(value = """
+            SELECT a.user_id AS userId, COALESCE(SUM(a.score), 0) AS score,
+                   SUM(CASE WHEN a.solved THEN 1 ELSE 0 END) AS solves
+            FROM attempts a JOIN puzzles p ON p.id = a.puzzle_id
+            WHERE a.trial = true AND a.finished_at IS NOT NULL
+              AND (:type = 'all' OR p.game_type = :type)
+            GROUP BY a.user_id
+            ORDER BY score DESC, solves DESC
+            """, nativeQuery = true)
+    List<Object[]> trialLeaderboard(@Param("type") String type);
+
     /** Per-(game type, difficulty) average star rating from trial playtesters. */
     @Query(value = """
             SELECT p.game_type AS gameType, p.difficulty AS difficulty,

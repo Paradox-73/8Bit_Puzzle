@@ -82,7 +82,65 @@ public class LeaderboardService {
         }
     }
 
+    /** True while the pre-launch trial is on (mirrors GameService.trialActive, kept local to avoid a
+     *  service dependency cycle). During the trial the board is computed from trial attempts instead
+     *  of Redis, so testers can see each other's standings; it's purged with the trial data. */
+    private boolean trialActive() {
+        AppProperties.Trial t = props.getTrial();
+        return t.isEnabled() && !LocalDate.now(GameService.ZONE).isAfter(t.getEndDate());
+    }
+
+    /**
+     * Trial standings from Postgres: total score per tester across finished trial attempts (the real
+     * Redis boards stay empty during the trial). Same response shape as {@link #board}, so the existing
+     * leaderboard page renders it unchanged. scope=batch narrows to the viewer's cohort; window is N/A
+     * (the trial walk isn't daily) so it's ignored.
+     */
+    private Map<String, Object> trialBoard(String type, String scope, long userId, int callerBatch) {
+        boolean batch = "batch".equalsIgnoreCase(scope);
+        String myCohort = cohortOf(userId, callerBatch);
+
+        List<Object[]> rows = attempts.trialLeaderboard(type);
+        List<Long> ids = rows.stream().map(r -> ((Number) r[0]).longValue()).toList();
+        Map<Long, User> byId = new HashMap<>();
+        users.findByIdIn(ids).forEach(u -> byId.put(u.getId(), u));
+
+        List<Map<String, Object>> entries = new ArrayList<>();
+        Map<String, Object> me = null;
+        int rank = 1;
+        for (Object[] r : rows) {
+            long id = ((Number) r[0]).longValue();
+            int score = r[1] == null ? 0 : ((Number) r[1]).intValue();
+            User u = byId.get(id);
+            if (u == null) continue;
+            if (batch) {
+                String cohort = (u.getProgram() == null ? "?" : u.getProgram()) + "|" + u.getBatchYear();
+                if (!cohort.equals(myCohort)) continue;
+            }
+            if (id == userId) me = Map.of("rank", rank, "score", score);
+            if (entries.size() < TOP_N) {
+                Map<String, Object> e = new LinkedHashMap<>();
+                e.put("rank", rank);
+                e.put("username", u.getUsername());
+                e.put("batchYear", u.getBatchYear());
+                e.put("score", score);
+                entries.add(e);
+            }
+            rank++;
+        }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", batch ? "batch" : "campus");
+        out.put("window", "trial");
+        out.put("date", LocalDate.now(GameService.ZONE).toString());
+        out.put("trial", true);
+        out.put("entries", entries);
+        out.put("me", me);
+        return out;
+    }
+
     public Map<String, Object> board(String type, String scope, String window, long userId, int callerBatch) {
+        if (trialActive()) return trialBoard(type, scope, userId, callerBatch);
         LocalDate date = LocalDate.now(GameService.ZONE);
         boolean batch = "batch".equalsIgnoreCase(scope);
         boolean allTime = "alltime".equalsIgnoreCase(window);
