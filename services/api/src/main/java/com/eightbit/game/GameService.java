@@ -106,25 +106,49 @@ public class GameService {
         }
     }
 
-    /** The trial view: the next puzzle the user hasn't finished yet, plus walk-through progress. */
+    /** The trial landing view: resume at the first puzzle the user hasn't finished (or the last, in
+     *  admire mode, once every puzzle is done). Prev/Next then walk the whole pool via {@link #trialAt}. */
     @Transactional(readOnly = true)
     public Map<String, Object> trialToday(long userId, String type) {
         List<Puzzle> pool = puzzles.findTrialPool(type);
+        if (pool.isEmpty()) return trialEmptyView(type);
         Set<Long> finished = new HashSet<>(attempts.finishedPuzzleIds(userId));
-        int total = pool.size();
-        int done = (int) pool.stream().filter(p -> finished.contains(p.getId())).count();
-
-        Puzzle p = pool.stream().filter(pz -> !finished.contains(pz.getId())).findFirst().orElse(null);
-        if (p == null) {
-            Map<String, Object> doneView = new LinkedHashMap<>();
-            doneView.put("gameType", type);
-            doneView.put("trial", true);
-            doneView.put("trialDone", true);
-            doneView.put("trialTotal", total);
-            doneView.put("trialIndex", done);
-            return doneView;
+        int idx0 = pool.size() - 1; // all finished → land on the last one, already in its solved state
+        for (int i = 0; i < pool.size(); i++) {
+            if (!finished.contains(pool.get(i).getId())) { idx0 = i; break; }
         }
+        return trialViewFor(userId, type, pool, idx0, finished);
+    }
 
+    /** A specific puzzle in the trial walk by 1-based position (clamped to range). Finished puzzles
+     *  come back in their solved 'admire' state, so going back never re-shows a solve as unsolved. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> trialAt(long userId, String type, int index1Based) {
+        if (!trialActive()) return today(userId, type);
+        List<Puzzle> pool = puzzles.findTrialPool(type);
+        if (pool.isEmpty()) return trialEmptyView(type);
+        int idx0 = Math.max(0, Math.min(pool.size() - 1, index1Based - 1));
+        Set<Long> finished = new HashSet<>(attempts.finishedPuzzleIds(userId));
+        return trialViewFor(userId, type, pool, idx0, finished);
+    }
+
+    /** Empty-pool view: nothing to test yet (or trial off). */
+    private Map<String, Object> trialEmptyView(String type) {
+        Map<String, Object> v = new LinkedHashMap<>();
+        v.put("gameType", type);
+        v.put("trial", true);
+        v.put("trialDone", true);
+        v.put("trialTotal", 0);
+        v.put("trialIndex", 0);
+        return v;
+    }
+
+    /** Build the view for pool[idx0], including the solved board + reveal when that puzzle is finished. */
+    private Map<String, Object> trialViewFor(long userId, String type, List<Puzzle> pool, int idx0,
+                                             Set<Long> finished) {
+        int total = pool.size();
+        Puzzle p = pool.get(idx0);
+        long doneInPool = pool.stream().filter(pz -> finished.contains(pz.getId())).count();
         GamePlay gp = play(type);
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, p.getId()).orElse(null);
         Map<String, Object> view = new LinkedHashMap<>();
@@ -134,7 +158,10 @@ public class GameService {
         view.put("difficulty", p.getDifficulty());
         view.put("trial", true);
         view.put("trialTotal", total);
-        view.put("trialIndex", done + 1); // 1-based position in the walk
+        view.put("trialIndex", idx0 + 1);          // 1-based position in the pool
+        view.put("trialHasPrev", idx0 > 0);
+        view.put("trialHasNext", idx0 < total - 1);
+        view.put("trialAllDone", doneInPool >= total);
         addCampusFlag(view, p); // front-end badge for non-dictionary / IIITB answers
         // Surface any rating/note this player already left, so the widget can show their last answer.
         if (attempt != null) {

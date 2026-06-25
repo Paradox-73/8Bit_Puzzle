@@ -146,6 +146,9 @@ export const api = {
 
   // GAME
   getToday: (type = 'wordle') => request('/puzzles/today', { query: { type } }),
+  // TRIAL ONLY: jump to a specific puzzle in the walk by 1-based position (solved ones come back
+  // in their finished/admire state). Powers the trial Back / Next controls.
+  getTrialAt: (type = 'wordle', index = 1) => request('/puzzles/trial', { query: { type, index } }),
   guess: (puzzleId, guess) =>
     request(`/puzzles/${puzzleId}/guess`, { method: 'POST', body: { guess } }),
   // Generic move: posts an arbitrary JSON body as-is (e.g. Connections selection).

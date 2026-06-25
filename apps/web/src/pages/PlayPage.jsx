@@ -44,13 +44,17 @@ export default function PlayPage() {
   // away from can't overwrite the new puzzle (the switch-leaves-old-puzzle bug, worse on mobile).
   const reqGame = useRef(game);
 
-  const load = useCallback(async () => {
+  // Pass a 1-based trialIndex to jump to that puzzle in the trial walk (Back/Next); omit it to land
+  // on today's puzzle (daily flow) or resume at the first unfinished trial puzzle.
+  const load = useCallback(async (trialIndex) => {
     reqGame.current = game;
     setLoading(true);
     setNoPuzzle(false);
     setPuzzle(null);
     try {
-      const data = await api.getToday(game);
+      const data = trialIndex != null
+        ? await api.getTrialAt(game, trialIndex)
+        : await api.getToday(game);
       if (reqGame.current !== game) return; // superseded by a newer tab switch — drop this result
       setPuzzle(data);
     } catch (err) {
@@ -137,11 +141,25 @@ export default function PlayPage() {
         <div className="trial-banner">
           <span className="trial-banner__tag">🧪 TRIAL</span>
           <span className="trial-banner__progress">
-            Puzzle {puzzle.trialIndex} of {puzzle.trialTotal} · no daily limit
+            Puzzle {puzzle.trialIndex} of {puzzle.trialTotal}
+            {puzzle.trialAllDone ? ' · all done 🎉 — revisit any' : ' · no daily limit'}
           </span>
-          <button className="btn btn--small" onClick={load}>
-            Next puzzle →
-          </button>
+          <span className="trial-banner__nav">
+            <button
+              className="btn btn--small btn--ghost"
+              onClick={() => load(puzzle.trialIndex - 1)}
+              disabled={!puzzle.trialHasPrev}
+            >
+              ← Back
+            </button>
+            <button
+              className="btn btn--small"
+              onClick={() => load(puzzle.trialIndex + 1)}
+              disabled={!puzzle.trialHasNext}
+            >
+              Next →
+            </button>
+          </span>
         </div>
       )}
 

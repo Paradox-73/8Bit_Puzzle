@@ -603,6 +603,10 @@ input[type='range'] {
   color: var(--text-dim);
   margin-right: auto;
 }
+.trial-banner__nav {
+  display: inline-flex;
+  gap: 8px;
+}
 /* "Campus word" heads-up for non-dictionary wordle/cryptic answers. */
 .campus-badge {
   display: inline-block;

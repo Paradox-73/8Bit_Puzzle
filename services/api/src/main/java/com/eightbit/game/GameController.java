@@ -25,6 +25,19 @@ public class GameController {
     }
 
     /**
+     * Trial walk: jump to a specific puzzle by 1-based position so testers can go back/forward through
+     * the pool. Finished puzzles return in their solved state (no re-playing a solve as unsolved).
+     * Only meaningful while the trial is on; otherwise it falls back to today's puzzle.
+     */
+    @GetMapping("/puzzles/trial")
+    public Map<String, Object> trial(@RequestParam(defaultValue = "wordle") String type,
+                                     @RequestParam(defaultValue = "1") int index,
+                                     @AuthenticationPrincipal AuthUser user) {
+        game.maybeSyncTrial();
+        return game.trialAt(user.id(), type, index);
+    }
+
+    /**
      * One move. Body shape is game-specific: Wordle sends {"guess":"CRANE"}, Connections sends
      * {"selection":["A","B","C","D"]}. The per-game {@code GamePlay} validates it.
      */
