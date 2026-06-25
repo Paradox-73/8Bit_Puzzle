@@ -17,6 +17,12 @@ public interface AttemptRepository extends JpaRepository<Attempt, Long> {
     List<Attempt> findTop50ByUserIdOrderByFinishedAtDesc(Long userId);
     List<Attempt> findTop100ByFlaggedTrueOrderByFinishedAtDesc();
 
+    /** Delete every attempt on the given puzzles. Needed before deleting puzzles (FK puzzle_id). */
+    @Modifying
+    @Transactional
+    @Query("delete from Attempt a where a.puzzleId in :puzzleIds")
+    int deleteByPuzzleIds(@Param("puzzleIds") List<Long> puzzleIds);
+
     // ----- TRIAL ONLY (pre-launch playtest; removable with trial mode) -----
 
     /** Puzzle ids this user has already FINISHED — used to serve the next unplayed trial puzzle. */

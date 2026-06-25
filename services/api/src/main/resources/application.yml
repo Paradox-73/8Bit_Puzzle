@@ -97,12 +97,13 @@ app:
     email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
     from-address: ${OTP_FROM:8bit@iiitb.ac.in}
 
-  # Pre-launch trial / playtest. OFF by default. When TRIAL_ENABLED=true, players solve every
-  # published puzzle one after another (no daily limit) so we can collect difficulty/timing stats
+  # Pre-launch trial / playtest. ON by default until launch. Players solve every puzzle from the
+  # trial file one after another (no daily limit) so we can collect difficulty/timing/rating stats
   # before launch. Trial attempts never hit the leaderboard and are purged via /admin/trial/reset.
-  # The trial auto-stops the day after trial.end-date regardless, so it can't run into the 16 Jul launch.
+  # The trial auto-stops the day after trial.end-date regardless, so it can't run into the 16 Jul
+  # launch. Set TRIAL_ENABLED=false to force it off.
   trial:
-    enabled: ${TRIAL_ENABLED:false}
+    enabled: ${TRIAL_ENABLED:true}
     end-date: ${TRIAL_END_DATE:2026-07-10}
     # The trial serves these under-review puzzles (wordle+connections+cryptic per day). Edits to the
     # file are picked up live (on next request) — no redeploy. Set an absolute path in prod, e.g.

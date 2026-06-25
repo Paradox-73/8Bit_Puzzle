@@ -35,9 +35,10 @@ services:
       # --- Optional web push ---
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      # --- Pre-launch TRIAL (off unless TRIAL_ENABLED=true in infra/.env). Serves puzzles-review.json
-      #     (mounted below); stats snapshot to the trial_data volume so they survive the purge. ---
-      TRIAL_ENABLED: ${TRIAL_ENABLED:-false}
+      # --- Pre-launch TRIAL (ON by default until launch; set TRIAL_ENABLED=false in infra/.env to
+      #     force off). Serves puzzles-review.json (mounted below); stats snapshot to the trial_data
+      #     volume so they survive the purge. Auto-stops the day after TRIAL_END_DATE regardless. ---
+      TRIAL_ENABLED: ${TRIAL_ENABLED:-true}
       TRIAL_END_DATE: ${TRIAL_END_DATE:-2026-07-10}
       TRIAL_PUZZLES_FILE: /app/trial/puzzles-review.json
       TRIAL_STATS_FILE: /app/data/trial-stats.json

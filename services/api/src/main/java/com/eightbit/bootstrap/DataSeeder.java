@@ -2,6 +2,7 @@ package com.eightbit.bootstrap;
 
 import com.eightbit.auth.User;
 import com.eightbit.auth.UserRepository;
+import com.eightbit.game.AttemptRepository;
 import com.eightbit.game.GameType;
 import com.eightbit.game.GameTypeRepository;
 import com.eightbit.game.Puzzle;
@@ -18,23 +19,23 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Seeds the minimum needed to play immediately on a fresh database: game types, an editor
- * account, 14 days of scheduled Wordle puzzles (so the buffer warning is satisfied), and an
- * evergreen failsafe pool. Idempotent -- skips anything that already exists.
+ * Seeds the minimum needed to play immediately on a fresh database: game types, an editor account,
+ * and an evergreen failsafe pool (so a day with no scheduled puzzle never 404s). Idempotent -- skips
+ * anything that already exists.
+ *
+ * It also purges the hardcoded dated demo puzzles seeded by earlier builds (see
+ * {@link #purgeLegacyDemoPuzzles()}): real content now comes from the admin CMS or, pre-launch, the
+ * trial file ({@code puzzles-review.json}). The purge runs every boot, even when seeding is disabled.
  */
 @Component
 public class DataSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
-    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     // Demo editor identity. The password is env-overridable (SEED_EDITOR_PASSWORD) and seeding can
     // be turned off entirely in production (app.seed.enabled=false / SEED_ENABLED=false), so a
@@ -52,24 +53,23 @@ public class DataSeeder implements CommandLineRunner {
     @Value("${app.seed.editor-password:}")
     private String editorPassword;
 
-    private static final List<String> SCHEDULE_WORDS = List.of(
-            "PIXEL", "BYTES", "LOGIC", "CACHE", "ROBOT", "QUEUE", "STACK",
-            "DEBUG", "ARRAY", "LINUX", "POWER", "SMART", "BRAIN", "MOUSE");
-
     private static final List<String> EVERGREEN_WORDS = List.of(
             "MAGIC", "QUICK", "LIGHT", "SOUND", "EARTH", "MUSIC", "DREAM", "PEACE", "HAPPY", "SHINE");
 
     private final GameTypeRepository gameTypes;
     private final PuzzleRepository puzzles;
+    private final AttemptRepository attempts;
     private final UserRepository users;
     private final UserStatsRepository stats;
     private final PasswordEncoder encoder;
     private final WordList wordList;
 
-    public DataSeeder(GameTypeRepository gameTypes, PuzzleRepository puzzles, UserRepository users,
-                      UserStatsRepository stats, PasswordEncoder encoder, WordList wordList) {
+    public DataSeeder(GameTypeRepository gameTypes, PuzzleRepository puzzles, AttemptRepository attempts,
+                      UserRepository users, UserStatsRepository stats, PasswordEncoder encoder,
+                      WordList wordList) {
         this.gameTypes = gameTypes;
         this.puzzles = puzzles;
+        this.attempts = attempts;
         this.users = users;
         this.stats = stats;
         this.encoder = encoder;
@@ -79,6 +79,8 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        // Runs unconditionally: clean up the old hardcoded dated demo puzzles even when seeding is off.
+        purgeLegacyDemoPuzzles();
         if (!seedEnabled) {
             log.info("Seeding disabled (app.seed.enabled=false) -- skipping demo data");
             return;
@@ -86,6 +88,20 @@ public class DataSeeder implements CommandLineRunner {
         seedGameTypes();
         seedEditor();
         seedPuzzles();
+    }
+
+    /**
+     * Delete the dated demo puzzles seeded by earlier builds (the PIXEL/BYTES… Wordles, demo
+     * Connections, LISTEN/HEART… cryptics). Their attempts go first (FK puzzle_id). The evergreen
+     * failsafe pool is deliberately kept. No-op once nothing matches, so it's safe on every boot.
+     */
+    private void purgeLegacyDemoPuzzles() {
+        List<Long> demoIds = puzzles.findSeededDemoIds();
+        if (demoIds.isEmpty()) return;
+        int attemptsDeleted = attempts.deleteByPuzzleIds(demoIds);
+        puzzles.deleteAllById(demoIds);
+        log.info("Purged {} legacy hardcoded demo puzzles ({} attempts removed)",
+                demoIds.size(), attemptsDeleted);
     }
 
     private void seedGameTypes() {
@@ -142,41 +158,14 @@ public class DataSeeder implements CommandLineRunner {
         return "ed-" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
     }
 
+    /**
+     * Evergreen failsafe pools only. These have no publish date, so they never appear on the admin
+     * calendar and are served only when a day has no scheduled/published puzzle (so the game never
+     * 404s). Trial mode bypasses them entirely. Real dated puzzles come from the admin CMS, or — until
+     * launch — from the trial file (puzzles-review.json). Idempotent: skips a pool that already exists.
+     */
     private void seedPuzzles() {
         Long editorId = users.findByUsername(EDITOR_USER).map(User::getId).orElse(null);
-        LocalDate today = LocalDate.now(IST);
-
-        for (int i = 0; i < SCHEDULE_WORDS.size(); i++) {
-            LocalDate date = today.plusDays(i);
-            if (puzzles.findServableForDate("wordle", date).isPresent()) continue;
-            String word = SCHEDULE_WORDS.get(i).toUpperCase();
-            wordList.register(word);
-            Puzzle p = new Puzzle();
-            p.setGameType("wordle");
-            p.setPublishDate(date);
-            p.setDifficulty(difficultyFor(date));
-            p.setContent(answer(word));
-            if (i == 0) {
-                // Demo easter egg: typing BYTES while solving today's Wordle pops a club message.
-                Map<String, Object> eggs = new HashMap<>();
-                eggs.put("triggers", List.of(Map.of(
-                        "match", "BYTES",
-                        "title", "🥚 8-bit secret",
-                        "body", "You typed the magic word. The 8Bit club salutes you!")));
-                p.setEasterEggs(eggs);
-            }
-            p.setStatus(PuzzleStatus.SCHEDULED);
-            p.setAuthorId(editorId);
-            p.setReviewerId(editorId); // seed data only; real puzzles need a second reviewer
-            try {
-                puzzles.save(p);
-            } catch (Exception dup) {
-                // unique (game_type, publish_date) -> already there, ignore
-            }
-        }
-
-        seedConnections(editorId, today);
-        seedCryptic(editorId, today);
 
         if (puzzles.findEvergreen("wordle").isEmpty()) {
             for (String w : EVERGREEN_WORDS) {
@@ -193,7 +182,39 @@ public class DataSeeder implements CommandLineRunner {
                 puzzles.save(p);
             }
         }
-        log.info("Seeded {} days of scheduled Wordle + evergreen failsafe pool", SCHEDULE_WORDS.size());
+
+        if (puzzles.findEvergreen("cryptic").isEmpty()) {
+            Puzzle p = new Puzzle();
+            p.setGameType("cryptic");
+            p.setPublishDate(null);
+            p.setDifficulty((short) 2);
+            p.setContent(cryptic("LISTEN", "(6)", "Pay attention to broken tinsel (6)",
+                    "Pay attention", "broken", "tinsel", "Anagram",
+                    "LISTEN ('pay attention') is an anagram (‘broken’) of TINSEL."));
+            p.setStatus(PuzzleStatus.EVERGREEN);
+            p.setAuthorId(editorId);
+            p.setReviewerId(editorId);
+            puzzles.save(p);
+        }
+
+        if (puzzles.findEvergreen("connections").isEmpty()) {
+            Puzzle p = new Puzzle();
+            p.setGameType("connections");
+            p.setPublishDate(null);
+            p.setDifficulty((short) 3);
+            Map<String, Object> content = new HashMap<>();
+            content.put("groups", List.of(
+                    group(0, "Hostel life", "WIFI", "MESS", "LAUNDRY", "CURFEW"),
+                    group(1, "Things in code", "PYTHON", "JAVA", "DEBUG", "COMMIT"),
+                    group(2, "Spots on campus", "ATRIUM", "LIBRARY", "COURT", "GAZEBO"),
+                    group(3, "___ test", "UNIT", "STRESS", "BETA", "ACID")));
+            p.setContent(content);
+            p.setStatus(PuzzleStatus.EVERGREEN);
+            p.setAuthorId(editorId);
+            p.setReviewerId(editorId);
+            puzzles.save(p);
+        }
+        log.info("Ensured evergreen failsafe pools (wordle + connections + cryptic)");
     }
 
     private Map<String, Object> answer(String word) {
@@ -202,113 +223,12 @@ public class DataSeeder implements CommandLineRunner {
         return m;
     }
 
-    /** Two campus-themed Connections sets, alternated across the next week. */
-    private void seedConnections(Long editorId, LocalDate today) {
-        List<List<Map<String, Object>>> variants = List.of(
-                List.of(
-                        group(0, "Hostel life", "WIFI", "MESS", "LAUNDRY", "CURFEW"),
-                        group(1, "Things in code", "PYTHON", "JAVA", "DEBUG", "COMMIT"),
-                        group(2, "Spots on campus", "ATRIUM", "LIBRARY", "COURT", "GAZEBO"),
-                        group(3, "___ test", "UNIT", "STRESS", "BETA", "ACID")),
-                List.of(
-                        group(0, "Endsem energy", "PANIC", "CRAM", "REDBULL", "ALLNIGHT"),
-                        group(1, "8-bit things", "PIXEL", "SPRITE", "BYTE", "RETRO"),
-                        group(2, "Mess menu", "POHA", "DOSA", "RICE", "CHAI"),
-                        group(3, "Network ___", "STACK", "PACKET", "SOCKET", "ROUTER")));
-
-        for (int i = 0; i < 7; i++) {
-            LocalDate date = today.plusDays(i);
-            if (puzzles.findServableForDate("connections", date).isPresent()) continue;
-            Map<String, Object> content = new HashMap<>();
-            content.put("groups", variants.get(i % variants.size()));
-            Puzzle p = new Puzzle();
-            p.setGameType("connections");
-            p.setPublishDate(date);
-            p.setDifficulty(difficultyFor(date));
-            p.setContent(content);
-            p.setStatus(PuzzleStatus.SCHEDULED);
-            p.setAuthorId(editorId);
-            p.setReviewerId(editorId);
-            try {
-                puzzles.save(p);
-            } catch (Exception dup) {
-                // already there
-            }
-        }
-        log.info("Seeded 7 days of Connections puzzles");
-    }
-
     private Map<String, Object> group(int level, String category, String... members) {
         Map<String, Object> g = new HashMap<>();
         g.put("level", level);
         g.put("category", category);
         g.put("members", List.of(members));
         return g;
-    }
-
-    /**
-     * Beginner-friendly cryptic clues, one per day, rotating through the main devices (anagram,
-     * hidden, reversal, charade, container, deletion, homophone, double-definition). Each carries the
-     * three teaching hints (definition / indicator / fodder) plus the full parse shown on solve.
-     */
-    private void seedCryptic(Long editorId, LocalDate today) {
-        List<Map<String, Object>> clues = List.of(
-                cryptic("LISTEN", "(6)", "Pay attention to broken tinsel (6)",
-                        "Pay attention", "broken", "tinsel", "Anagram",
-                        "LISTEN ('pay attention') is an anagram (‘broken’) of TINSEL."),
-                cryptic("HEART", "(5)", "Some of the artistic core (5)",
-                        "core", "Some of", "the artistic", "Hidden word",
-                        "HEART is hidden inside 'tHE ARTistic'."),
-                cryptic("STRAW", "(5)", "Drinking tube made from warts sent back (5)",
-                        "Drinking tube", "sent back", "warts", "Reversal",
-                        "WARTS reversed ('sent back') spells STRAW."),
-                cryptic("CARPET", "(6)", "Vehicle's animal companion covers the floor (6)",
-                        "covers the floor", "build from parts", "CAR (vehicle) + PET (animal companion)",
-                        "Charade", "CAR (vehicle) + PET (animal companion) = CARPET."),
-                cryptic("STABLE", "(6)", "Steady, capable, framed by street (6)",
-                        "Steady", "framed by", "ABLE (capable) inside ST (street)", "Container",
-                        "ABLE ('capable') placed inside ST (abbrev. for street) = STABLE."),
-                cryptic("COLD", "(4)", "Chilly scold's head dropped (4)",
-                        "Chilly", "head dropped", "scold", "Deletion",
-                        "SCOLD with its head (first letter) dropped = COLD."),
-                cryptic("NIGHT", "(5)", "Reportedly a medieval warrior brings darkness (5)",
-                        "darkness", "Reportedly", "knight (medieval warrior)", "Homophone",
-                        "NIGHT sounds like KNIGHT ('medieval warrior') — 'reportedly' flags the homophone."),
-                cryptic("LEFT", "(4)", "Departed, but remaining (4)",
-                        "Departed / remaining", "two meanings", "—", "Double definition",
-                        "LEFT means both 'departed' and 'what remains' — two definitions in one."));
-
-        for (int i = 0; i < clues.size(); i++) {
-            LocalDate date = today.plusDays(i);
-            if (puzzles.findServableForDate("cryptic", date).isPresent()) continue;
-            Puzzle p = new Puzzle();
-            p.setGameType("cryptic");
-            p.setPublishDate(date);
-            p.setDifficulty(difficultyFor(date));
-            p.setContent(clues.get(i));
-            p.setStatus(PuzzleStatus.SCHEDULED);
-            p.setAuthorId(editorId);
-            p.setReviewerId(editorId);
-            try {
-                puzzles.save(p);
-            } catch (Exception dup) {
-                // unique (game_type, publish_date) -> already there, ignore
-            }
-        }
-
-        // Evergreen failsafe so there's always a cryptic to serve.
-        if (puzzles.findEvergreen("cryptic").isEmpty()) {
-            Puzzle p = new Puzzle();
-            p.setGameType("cryptic");
-            p.setPublishDate(null);
-            p.setDifficulty((short) 2);
-            p.setContent(clues.get(0));
-            p.setStatus(PuzzleStatus.EVERGREEN);
-            p.setAuthorId(editorId);
-            p.setReviewerId(editorId);
-            puzzles.save(p);
-        }
-        log.info("Seeded {} days of cryptic clues + evergreen failsafe", clues.size());
     }
 
     private Map<String, Object> cryptic(String answer, String enumeration, String clue,
@@ -324,19 +244,5 @@ public class DataSeeder implements CommandLineRunner {
         m.put("device", device);
         m.put("explanation", explanation);
         return m;
-    }
-
-    /** Easy on Monday, hardest on Friday/weekend (build doc section 2). */
-    private short difficultyFor(LocalDate d) {
-        DayOfWeek dow = d.getDayOfWeek();
-        return switch (dow) {
-            case MONDAY -> 1;
-            case TUESDAY -> 2;
-            case WEDNESDAY -> 2;
-            case THURSDAY -> 3;
-            case FRIDAY -> 4;
-            case SATURDAY -> 5;
-            case SUNDAY -> 3;
-        };
     }
 }

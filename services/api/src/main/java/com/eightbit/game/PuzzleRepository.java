@@ -35,6 +35,17 @@ public interface PuzzleRepository extends JpaRepository<Puzzle, Long> {
     /** All trial puzzles, for the file→DB sync (upsert + prune). */
     List<Puzzle> findByStatus(String status);
 
+    /**
+     * Ids of the old hardcoded demo puzzles seeded by earlier builds. Seed data sets author ==
+     * reviewer, which {@code approve()} forbids for real puzzles (SAME_AUTHOR), so this never matches
+     * an editor-created puzzle. Scoped to dated 'scheduled' rows; the evergreen failsafe is left alone.
+     */
+    @Query("""
+            select p.id from Puzzle p
+            where p.status = 'scheduled' and p.authorId is not null and p.authorId = p.reviewerId
+            """)
+    List<Long> findSeededDemoIds();
+
     List<Puzzle> findByGameTypeAndPublishDateBetweenOrderByPublishDate(
             String gameType, LocalDate start, LocalDate end);
 
