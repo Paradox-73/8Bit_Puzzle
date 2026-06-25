@@ -92,12 +92,12 @@ public class GameService {
     }
 
     private boolean isTrialPlayable(Puzzle p) {
-        String s = p.getStatus();
-        return PuzzleStatus.SCHEDULED.equals(s) || PuzzleStatus.PUBLISHED.equals(s)
-                || PuzzleStatus.EVERGREEN.equals(s);
+        // The trial pool is exactly the status='trial' rows synced from puzzles-review.json — that's
+        // what trialToday() serves, so that's what guess/hint must allow.
+        return PuzzleStatus.TRIAL.equals(p.getStatus());
     }
 
-    /** Guard for guess/hint: in trial any published puzzle is playable; otherwise only today's. */
+    /** Guard for guess/hint: in trial the whole trial pool is playable; otherwise only today's. */
     private void assertPlayable(Puzzle p) {
         if (trialActive() && isTrialPlayable(p)) return;
         Puzzle todayPuzzle = resolveTodayPuzzle(p.getGameType());
