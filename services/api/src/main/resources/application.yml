@@ -96,6 +96,9 @@ app:
     ttl-minutes: ${OTP_TTL_MINUTES:10}
     email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
     from-address: ${OTP_FROM:8bit@iiitb.ac.in}
+    # TEMPORARY stopgap while email delivery is broken: a universal code any user may type instead of
+    # the emailed OTP (e.g. "000000"). DEFEATS the anti-fake-account protection — leave BLANK for launch.
+    bypass-code: ${OTP_BYPASS_CODE:}
 
   # Pre-launch trial / playtest. ON by default until launch. Players solve every puzzle from the
   # trial file one after another (no daily limit) so we can collect difficulty/timing/rating stats

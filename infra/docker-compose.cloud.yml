@@ -28,6 +28,8 @@ services:
       # --- Email OTP (Brevo/Resend SMTP) ---
       OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN:-iiitb.ac.in}
       OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
+      # TEMPORARY: universal OTP bypass code for testers while email delivery is broken. Leave blank for launch.
+      OTP_BYPASS_CODE: ${OTP_BYPASS_CODE:-}
       MAIL_HOST: ${MAIL_HOST:-}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
