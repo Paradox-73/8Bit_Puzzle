@@ -62,7 +62,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       # Email OTP login. Codes are emailed via SMTP, or written to the log if MAIL_HOST is unset.
-      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN:-iiitb.ac.in}
+      # `-` (not `:-`): an explicit empty OTP_EMAIL_DOMAIN in .env means "allow any email";
+      # only a fully-unset var falls back to iiitb.ac.in.
+      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN-iiitb.ac.in}
       OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
       MAIL_HOST: ${MAIL_HOST:-}
       MAIL_PORT: ${MAIL_PORT:-587}

@@ -77,7 +77,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                placeholder="you@iiitb.ac.in"
+                placeholder="you@gmail.com"
                 required
               />
             </label>

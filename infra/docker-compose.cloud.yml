@@ -26,7 +26,9 @@ services:
       ADMIN_LOGIN_CODE: ${ADMIN_LOGIN_CODE:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       # --- Email OTP (Brevo/Resend SMTP) ---
-      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN:-iiitb.ac.in}
+      # `-` (not `:-`): an explicit empty OTP_EMAIL_DOMAIN in .env means "allow any email";
+      # only a fully-unset var falls back to iiitb.ac.in.
+      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN-iiitb.ac.in}
       OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
       # TEMPORARY: universal OTP bypass code for testers while email delivery is broken. Leave blank for launch.
       OTP_BYPASS_CODE: ${OTP_BYPASS_CODE:-}
