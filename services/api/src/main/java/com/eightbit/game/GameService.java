@@ -3,7 +3,6 @@ package com.eightbit.game;
 import com.eightbit.auth.UserRepository;
 import com.eightbit.auth.User;
 import com.eightbit.auth.otp.EmailSender;
-import com.eightbit.common.config.AppProperties;
 import com.eightbit.common.ratelimit.RateLimiter;
 import com.eightbit.common.web.ApiException;
 import com.eightbit.game.dto.GameDtos.AttemptSummary;
@@ -24,11 +23,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 public class GameService {
@@ -51,13 +48,10 @@ public class GameService {
     private final ApplicationEventPublisher events;
     private final EmailSender email;
     private final String teamEmail;
-    private final AppProperties appProps;
-    private final TrialPuzzleSync trialSync;
 
     public GameService(PuzzleRepository puzzles, AttemptRepository attempts, List<GamePlay> playList,
                        StatsService statsService, EasterEggService easterEggs, RateLimiter rateLimiter,
                        UserRepository users, ApplicationEventPublisher events, EmailSender email,
-                       AppProperties appProps, TrialPuzzleSync trialSync,
                        @Value("${app.feedback.to:8bit@iiitb.ac.in}") String teamEmail) {
         this.puzzles = puzzles;
         this.attempts = attempts;
@@ -68,115 +62,15 @@ public class GameService {
         this.users = users;
         this.events = events;
         this.email = email;
-        this.appProps = appProps;
-        this.trialSync = trialSync;
         this.teamEmail = teamEmail;
     }
 
-    /**
-     * Re-import puzzles-review.json if it changed. Called (outside any read-only transaction) before
-     * serving/playing in trial mode, so edits to the file are live. No-op when trial is inactive.
-     */
-    public void maybeSyncTrial() {
-        if (trialActive()) trialSync.syncIfChanged();
-    }
-
-    // ===== TRIAL MODE (pre-launch playtest; entirely flag-gated, removable) =====
-    // When active, players walk every published puzzle back-to-back with no daily gate, and every
-    // completion is tagged trial=true and kept out of streaks/scoring-by-streak/leaderboard.
-
-    /** True only while the trial flag is on AND we're on/before the configured end date. */
-    public boolean trialActive() {
-        AppProperties.Trial t = appProps.getTrial();
-        return t.isEnabled() && !today().isAfter(t.getEndDate());
-    }
-
-    private boolean isTrialPlayable(Puzzle p) {
-        // The trial pool is exactly the status='trial' rows synced from puzzles-review.json — that's
-        // what trialToday() serves, so that's what guess/hint must allow.
-        return PuzzleStatus.TRIAL.equals(p.getStatus());
-    }
-
-    /** Guard for guess/hint: in trial the whole trial pool is playable; otherwise only today's. */
+    /** Guard for guess/hint: you may only play today's resolved puzzle. */
     private void assertPlayable(Puzzle p) {
-        if (trialActive() && isTrialPlayable(p)) return;
         Puzzle todayPuzzle = resolveTodayPuzzle(p.getGameType());
         if (!todayPuzzle.getId().equals(p.getId())) {
             throw ApiException.forbidden("NOT_TODAY", "That puzzle is not in play right now");
         }
-    }
-
-    /** The trial landing view: resume at the first puzzle the user hasn't finished (or the last, in
-     *  admire mode, once every puzzle is done). Prev/Next then walk the whole pool via {@link #trialAt}. */
-    @Transactional(readOnly = true)
-    public Map<String, Object> trialToday(long userId, String type) {
-        List<Puzzle> pool = puzzles.findTrialPool(type);
-        if (pool.isEmpty()) return trialEmptyView(type);
-        Set<Long> finished = new HashSet<>(attempts.finishedPuzzleIds(userId));
-        int idx0 = pool.size() - 1; // all finished → land on the last one, already in its solved state
-        for (int i = 0; i < pool.size(); i++) {
-            if (!finished.contains(pool.get(i).getId())) { idx0 = i; break; }
-        }
-        return trialViewFor(userId, type, pool, idx0, finished);
-    }
-
-    /** A specific puzzle in the trial walk by 1-based position (clamped to range). Finished puzzles
-     *  come back in their solved 'admire' state, so going back never re-shows a solve as unsolved. */
-    @Transactional(readOnly = true)
-    public Map<String, Object> trialAt(long userId, String type, int index1Based) {
-        if (!trialActive()) return today(userId, type);
-        List<Puzzle> pool = puzzles.findTrialPool(type);
-        if (pool.isEmpty()) return trialEmptyView(type);
-        int idx0 = Math.max(0, Math.min(pool.size() - 1, index1Based - 1));
-        Set<Long> finished = new HashSet<>(attempts.finishedPuzzleIds(userId));
-        return trialViewFor(userId, type, pool, idx0, finished);
-    }
-
-    /** Empty-pool view: nothing to test yet (or trial off). */
-    private Map<String, Object> trialEmptyView(String type) {
-        Map<String, Object> v = new LinkedHashMap<>();
-        v.put("gameType", type);
-        v.put("trial", true);
-        v.put("trialDone", true);
-        v.put("trialTotal", 0);
-        v.put("trialIndex", 0);
-        return v;
-    }
-
-    /** Build the view for pool[idx0], including the solved board + reveal when that puzzle is finished. */
-    private Map<String, Object> trialViewFor(long userId, String type, List<Puzzle> pool, int idx0,
-                                             Set<Long> finished) {
-        int total = pool.size();
-        Puzzle p = pool.get(idx0);
-        long doneInPool = pool.stream().filter(pz -> finished.contains(pz.getId())).count();
-        GamePlay gp = play(type);
-        Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, p.getId()).orElse(null);
-        Map<String, Object> view = new LinkedHashMap<>();
-        view.put("puzzleId", p.getId());
-        view.put("gameType", type);
-        view.put("date", p.getPublishDate() == null ? null : p.getPublishDate().toString());
-        view.put("difficulty", p.getDifficulty());
-        view.put("trial", true);
-        view.put("trialTotal", total);
-        view.put("trialIndex", idx0 + 1);          // 1-based position in the pool
-        view.put("trialHasPrev", idx0 > 0);
-        view.put("trialHasNext", idx0 < total - 1);
-        view.put("trialAllDone", doneInPool >= total);
-        addCampusFlag(view, p); // front-end badge for non-dictionary / IIITB answers
-        // Surface any rating/note this player already left, so the widget can show their last answer.
-        if (attempt != null) {
-            if (attempt.getRating() != null) view.put("myRating", attempt.getRating());
-            if (attempt.getFeedback() != null) view.put("myFeedback", attempt.getFeedback());
-        }
-        view.putAll(gp.todayView(p, attempt));
-        view.put("status", status(attempt));
-        if (attempt != null && attempt.isFinished()) {
-            view.put("score", attempt.getScore());
-            view.putAll(gp.reveal(p, attempt));
-        } else {
-            view.put("score", null);
-        }
-        return view;
     }
 
     public LocalDate today() {
@@ -205,9 +99,6 @@ public class GameService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> today(long userId, String type) {
-        if (trialActive()) {
-            return trialToday(userId, type);
-        }
         Puzzle p = resolveTodayPuzzle(type);
         GamePlay gp = play(type);
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, p.getId()).orElse(null);
@@ -237,23 +128,6 @@ public class GameService {
         }
     }
 
-    /** Trial only: save a playtester's 1–5 rating and/or "what to change" note for a puzzle. */
-    @Transactional
-    public Map<String, Object> rate(long userId, long puzzleId, Integer rating, String message) {
-        Puzzle p = puzzles.findById(puzzleId)
-                .orElseThrow(() -> ApiException.notFound("NO_PUZZLE", "Puzzle not found"));
-        Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, p.getId())
-                .orElseGet(() -> new Attempt(userId, p.getId()));
-        if (trialActive()) attempt.setTrial(true);
-        if (rating != null) attempt.setRating((short) Math.max(1, Math.min(5, rating)));
-        if (message != null) {
-            String m = message.strip();
-            attempt.setFeedback(m.length() > 1000 ? m.substring(0, 1000) : m);
-        }
-        attempts.save(attempt);
-        return Map.of("ok", true);
-    }
-
     /** Reveal one hint (vowel/consonant) for today's in-progress puzzle. */
     @Transactional
     public Map<String, Object> hint(long userId, long puzzleId, String kind) {
@@ -266,7 +140,6 @@ public class GameService {
         GamePlay gp = play(p.getGameType());
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, puzzleId)
                 .orElseGet(() -> new Attempt(userId, puzzleId));
-        if (trialActive()) attempt.setTrial(true);
         if (attempt.isFinished()) {
             throw ApiException.conflict("ALREADY_FINISHED", "You've already finished today's puzzle");
         }
@@ -286,14 +159,12 @@ public class GameService {
         Puzzle p = puzzles.findById(puzzleId)
                 .orElseThrow(() -> ApiException.notFound("NO_PUZZLE", "Puzzle not found"));
 
-        // Anti-cheat: you may only play today's resolved puzzle (relaxed to the whole pool in trial).
-        boolean trial = trialActive();
+        // Anti-cheat: you may only play today's resolved puzzle.
         assertPlayable(p);
 
         GamePlay gp = play(p.getGameType());
         Attempt attempt = attempts.findByUserIdAndPuzzleId(userId, puzzleId)
                 .orElseGet(() -> new Attempt(userId, puzzleId));
-        if (trial) attempt.setTrial(true);
         if (attempt.isFinished()) {
             throw ApiException.conflict("ALREADY_FINISHED", "You've already finished today's puzzle");
         }
@@ -318,21 +189,14 @@ public class GameService {
             attempt.setCompletionMs(completionMs);
             attempt.setFinishedAt(Instant.now());
 
-            if (trial) {
-                // Playtest: record timing/guesses for stats, but stay out of streaks, the
-                // leaderboard and the quick-solve alerting. Score (no streak) is informational only.
-                attempt.setScore(gp.score(p, attempt, 0));
-                applyAuditFlags(attempt, st.solved(), completionMs);
-            } else {
-                boolean firstSolver = st.solved() && attempts.countByPuzzleIdAndSolvedTrue(puzzleId) == 0;
-                int solveHour = ZonedDateTime.now(ZONE).getHour();
-                UserStats stats = statsService.recordCompletion(userId, today(), st.solved(), firstSolver,
-                        solveHour, guessesUsed, p.getGameType());
-                attempt.setScore(gp.score(p, attempt, stats.getCurrentStreak()));
-                applyAuditFlags(attempt, st.solved(), completionMs);
-                maybeWarnQuickSolve(resp, attempt, stats, st.solved(), guessesUsed, p.getGameType(),
-                        userId, username, batchYear);
-            }
+            boolean firstSolver = st.solved() && attempts.countByPuzzleIdAndSolvedTrue(puzzleId) == 0;
+            int solveHour = ZonedDateTime.now(ZONE).getHour();
+            UserStats stats = statsService.recordCompletion(userId, today(), st.solved(), firstSolver,
+                    solveHour, guessesUsed, p.getGameType());
+            attempt.setScore(gp.score(p, attempt, stats.getCurrentStreak()));
+            applyAuditFlags(attempt, st.solved(), completionMs);
+            maybeWarnQuickSolve(resp, attempt, stats, st.solved(), guessesUsed, p.getGameType(),
+                    userId, username, batchYear);
 
             resp.put("score", attempt.getScore());
             resp.put("shareGrid", gp.shareGrid(p, attempt));
@@ -346,7 +210,7 @@ public class GameService {
 
         attempts.save(attempt);
 
-        if (st.gameOver() && !trial) {
+        if (st.gameOver()) {
             // Unverified accounts still appear on the campus board but don't count toward batch
             // scores -- the anti-batch-stuffing rule (build doc section 6). Verified-by-default
             // when OTP is off.

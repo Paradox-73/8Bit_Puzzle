@@ -20,21 +20,7 @@ public class GameController {
     @GetMapping("/puzzles/today")
     public Map<String, Object> today(@RequestParam(defaultValue = "wordle") String type,
                                      @AuthenticationPrincipal AuthUser user) {
-        game.maybeSyncTrial();
         return game.today(user.id(), type);
-    }
-
-    /**
-     * Trial walk: jump to a specific puzzle by 1-based position so testers can go back/forward through
-     * the pool. Finished puzzles return in their solved state (no re-playing a solve as unsolved).
-     * Only meaningful while the trial is on; otherwise it falls back to today's puzzle.
-     */
-    @GetMapping("/puzzles/trial")
-    public Map<String, Object> trial(@RequestParam(defaultValue = "wordle") String type,
-                                     @RequestParam(defaultValue = "1") int index,
-                                     @AuthenticationPrincipal AuthUser user) {
-        game.maybeSyncTrial();
-        return game.trialAt(user.id(), type, index);
     }
 
     /**
@@ -45,7 +31,6 @@ public class GameController {
     public Map<String, Object> guess(@PathVariable("id") long puzzleId,
                                      @RequestBody Map<String, Object> move,
                                      @AuthenticationPrincipal AuthUser user) {
-        game.maybeSyncTrial();
         int batch = user.batchYear() == null ? 0 : user.batchYear();
         return game.guess(user.id(), user.username(), batch, puzzleId, move);
     }
@@ -60,18 +45,6 @@ public class GameController {
                                     @AuthenticationPrincipal AuthUser user) {
         Object kind = body == null ? null : body.get("kind");
         return game.hint(user.id(), puzzleId, kind == null ? null : kind.toString());
-    }
-
-    /** Trial playtest feedback: rate a puzzle 1–5 and/or leave a "what to change" note. */
-    @PostMapping("/puzzles/{id}/rate")
-    public Map<String, Object> rate(@PathVariable("id") long puzzleId,
-                                    @RequestBody Map<String, Object> body,
-                                    @AuthenticationPrincipal AuthUser user) {
-        Object r = body == null ? null : body.get("rating");
-        Object m = body == null ? null : body.get("message");
-        Integer rating = r instanceof Number n ? n.intValue() : null;
-        String message = m == null ? null : m.toString();
-        return game.rate(user.id(), puzzleId, rating, message);
     }
 
     @GetMapping("/me/attempts")

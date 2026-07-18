@@ -24,17 +24,12 @@ public class AuthService {
     private final RateLimiter rateLimiter;
     private final AppProperties props;
     private final String adminLoginCode;
-    private final String bypassCode;
-
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthService.class);
 
     public AuthService(UserRepository users, UserStatsRepository stats, RollNumberParser rollParser,
                        JwtService jwt, VerificationService verification,
                        RateLimiter rateLimiter, AppProperties props,
                        @org.springframework.beans.factory.annotation.Value("${app.admin.login-code:}")
-                       String adminLoginCode,
-                       @org.springframework.beans.factory.annotation.Value("${app.otp.bypass-code:}")
-                       String bypassCode) {
+                       String adminLoginCode) {
         this.users = users;
         this.stats = stats;
         this.rollParser = rollParser;
@@ -43,12 +38,6 @@ public class AuthService {
         this.rateLimiter = rateLimiter;
         this.props = props;
         this.adminLoginCode = adminLoginCode;
-        this.bypassCode = bypassCode;
-        if (bypassCode != null && !bypassCode.isBlank()) {
-            log.warn("OTP BYPASS CODE IS ENABLED — any user can verify any @{} email without receiving "
-                    + "an email. This is a temporary stopgap for broken email delivery; BLANK "
-                    + "OTP_BYPASS_CODE before launch.", props.getOtp().getEmailDomain());
-        }
     }
 
     private boolean isAdmin(User u) {
@@ -59,16 +48,6 @@ public class AuthService {
     private boolean isAdminCode(User u, String code) {
         return adminLoginCode != null && !adminLoginCode.isBlank()
                 && isAdmin(u) && adminLoginCode.equals(code);
-    }
-
-    /**
-     * TEMPORARY stopgap: a universal code accepted in place of the emailed OTP for ANY user, so testers
-     * can log in while email delivery is broken. Works for everyone (unlike the admin code), so it
-     * defeats the anti-fake-account protection — BLANK {@code app.otp.bypass-code} (OTP_BYPASS_CODE)
-     * before launch. Empty/unset = disabled.
-     */
-    private boolean isBypassCode(String code) {
-        return bypassCode != null && !bypassCode.isBlank() && bypassCode.equals(code == null ? null : code.trim());
     }
 
     /**
@@ -167,7 +146,7 @@ public class AuthService {
         String email = rawEmail == null ? "" : rawEmail.trim().toLowerCase();
         User u = users.findByEmail(email)
                 .orElseThrow(() -> ApiException.unauthorized("BAD_DETAILS", "Those details don't match an account"));
-        if (!isAdminCode(u, code) && !isBypassCode(code)) {
+        if (!isAdminCode(u, code)) {
             verification.check(u.getId(), code);
         }
         if (!u.isEmailVerified()) {

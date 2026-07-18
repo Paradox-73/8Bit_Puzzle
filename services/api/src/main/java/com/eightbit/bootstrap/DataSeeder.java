@@ -29,8 +29,8 @@ import java.util.Map;
  * anything that already exists.
  *
  * It also purges the hardcoded dated demo puzzles seeded by earlier builds (see
- * {@link #purgeLegacyDemoPuzzles()}): real content now comes from the admin CMS or, pre-launch, the
- * trial file ({@code puzzles-review.json}). The purge runs every boot, even when seeding is disabled.
+ * {@link #purgeLegacyDemoPuzzles()}): real content now comes from the admin CMS or the launch importer
+ * ({@link com.eightbit.game.LaunchPuzzleImporter}). The purge runs every boot, even when seeding is disabled.
  */
 @Component
 public class DataSeeder implements CommandLineRunner {
@@ -161,8 +161,8 @@ public class DataSeeder implements CommandLineRunner {
     /**
      * Evergreen failsafe pools only. These have no publish date, so they never appear on the admin
      * calendar and are served only when a day has no scheduled/published puzzle (so the game never
-     * 404s). Trial mode bypasses them entirely. Real dated puzzles come from the admin CMS, or — until
-     * launch — from the trial file (puzzles-review.json). Idempotent: skips a pool that already exists.
+     * 404s). Real dated puzzles come from the admin CMS or the launch importer (puzzles-review.json).
+     * Idempotent: skips a pool that already exists.
      */
     private void seedPuzzles() {
         Long editorId = users.findByUsername(EDITOR_USER).map(User::getId).orElse(null);

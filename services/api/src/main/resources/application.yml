@@ -83,6 +83,12 @@ app:
   content:
     # Editors must keep at least this many days of puzzles queued per game.
     buffer-warn-below-days: 14
+  import:
+    # One-time importer: publishes the dated puzzles in this file as REAL daily puzzles
+    # (status='published', one per day) on startup — fill-if-missing, so admin edits/re-runs never
+    # clobber. Gitignored so answers never reach the repo; mount it on the VM (see docker-compose).
+    # Set IMPORT_PUZZLES_FILE to an absolute path in prod; resolved against the API's working dir if relative.
+    puzzles-file: ${IMPORT_PUZZLES_FILE:puzzles-review.json}
   admin:
     # Master login code for editor/admin accounts: typed in place of the emailed OTP so an admin can
     # always get in without depending on email delivery. Keep it SECRET (gitignored env) — never
@@ -94,27 +100,11 @@ app:
     # verification before an account counts toward batch scores.
     enabled: ${OTP_ENABLED:false}
     ttl-minutes: ${OTP_TTL_MINUTES:10}
-    email-domain: ${OTP_EMAIL_DOMAIN:iiitb.ac.in}
+    # Accepted sign-up domain. The login form locks the field to this domain, so the two MUST agree
+    # (createAccount rejects any other domain even when OTP is off). Currently gmail.com. Override
+    # with OTP_EMAIL_DOMAIN, or set it blank to allow any domain.
+    email-domain: ${OTP_EMAIL_DOMAIN:gmail.com}
     from-address: ${OTP_FROM:8bit@iiitb.ac.in}
-    # TEMPORARY stopgap while email delivery is broken: a universal code any user may type instead of
-    # the emailed OTP (e.g. "000000"). DEFEATS the anti-fake-account protection — leave BLANK for launch.
-    bypass-code: ${OTP_BYPASS_CODE:}
-
-  # Pre-launch trial / playtest. ON by default until launch. Players solve every puzzle from the
-  # trial file one after another (no daily limit) so we can collect difficulty/timing/rating stats
-  # before launch. Trial attempts never hit the leaderboard and are purged via /admin/trial/reset.
-  # The trial auto-stops the day after trial.end-date regardless, so it can't run into the 16 Jul
-  # launch. Set TRIAL_ENABLED=false to force it off.
-  trial:
-    enabled: ${TRIAL_ENABLED:true}
-    end-date: ${TRIAL_END_DATE:2026-07-10}
-    # The trial serves these under-review puzzles (wordle+connections+cryptic per day). Edits to the
-    # file are picked up live (on next request) — no redeploy. Set an absolute path in prod, e.g.
-    # TRIAL_PUZZLES_FILE=/app/puzzles-review.json. Resolved against the API's working directory if relative.
-    puzzles-file: ${TRIAL_PUZZLES_FILE:puzzles-review.json}
-    # Trial stats are snapshotted here (newest appended) so they outlive the pre-launch data purge —
-    # the real junior-play stats stay separate (trial=false). Set an absolute path in prod.
-    stats-file: ${TRIAL_STATS_FILE:trial-stats.json}
 
   # Cohort sizes for Batch War participation % (distinct solvers ÷ capacity). Program names must
   # match the rollnumber program-map exactly. Capacities are rough estimates: if more verified

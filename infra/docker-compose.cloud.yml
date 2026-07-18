@@ -28,10 +28,8 @@ services:
       # --- Email OTP (Brevo/Resend SMTP) ---
       # `-` (not `:-`): an explicit empty OTP_EMAIL_DOMAIN in .env means "allow any email";
       # only a fully-unset var falls back to iiitb.ac.in.
-      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN-iiitb.ac.in}
+      OTP_EMAIL_DOMAIN: ${OTP_EMAIL_DOMAIN-gmail.com}
       OTP_FROM: ${OTP_FROM:-8bit@iiitb.ac.in}
-      # TEMPORARY: universal OTP bypass code for testers while email delivery is broken. Leave blank for launch.
-      OTP_BYPASS_CODE: ${OTP_BYPASS_CODE:-}
       MAIL_HOST: ${MAIL_HOST:-}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -39,24 +37,18 @@ services:
       # --- Optional web push ---
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      # --- Pre-launch TRIAL (ON by default until launch; set TRIAL_ENABLED=false in infra/.env to
-      #     force off). Serves puzzles-review.json (mounted below); stats snapshot to the trial_data
-      #     volume so they survive the purge. Auto-stops the day after TRIAL_END_DATE regardless. ---
-      TRIAL_ENABLED: ${TRIAL_ENABLED:-true}
-      TRIAL_END_DATE: ${TRIAL_END_DATE:-2026-07-10}
-      TRIAL_PUZZLES_FILE: /app/trial/puzzles-review.json
-      TRIAL_STATS_FILE: /app/data/trial-stats.json
+      # --- Puzzle import: on boot, publishes the dated puzzles in this file as REAL daily puzzles
+      #     (fill-if-missing). The gitignored file is mounted below; copy it to infra/trial/ on the VM. ---
+      IMPORT_PUZZLES_FILE: /app/trial/puzzles-review.json
       # Heap capped for a 1 GB box.
       JAVA_OPTS: ${JAVA_OPTS:--Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m}
     # Exposed only to the VM's localhost (for debugging via curl); the internet reaches it via caddy.
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      # The under-review puzzle file is gitignored, so git never pulls it — copy it to
-      # infra/trial/puzzles-review.json on the VM (see TRIAL.md). A directory mount degrades
-      # gracefully if absent; edits are picked up live on the next request.
+      # The puzzle file is gitignored, so git never pulls it — copy it to infra/trial/puzzles-review.json
+      # on the VM. The boot importer publishes its dated puzzles as real daily puzzles (fill-if-missing).
       - ./trial:/app/trial:ro
-      - trial_data:/app/data
     restart: unless-stopped
 
   caddy:
@@ -77,4 +69,3 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  trial_data:   # persists trial-stats.json snapshots across container rebuilds

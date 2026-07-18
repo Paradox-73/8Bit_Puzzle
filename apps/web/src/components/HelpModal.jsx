@@ -30,6 +30,18 @@ function WordleHowTo() {
       <p className="help-note">
         Stuck? Use a <strong>hint</strong> to learn one vowel and one consonant the word contains.
       </p>
+      <p className="help-note">
+        Love it? Play the original{' '}
+        <a
+          className="help-link"
+          href="https://www.nytimes.com/games/wordle/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          NYT Wordle
+        </a>
+        .
+      </p>
     </div>
   );
 }
@@ -56,6 +68,18 @@ function ConnectionsHowTo() {
       <p className="help-note">
         “One away” means 3 of your 4 belong together. Stuck? The <strong>Hint</strong> button reveals
         one word from each group with its colour.
+      </p>
+      <p className="help-note">
+        Love it? Play the original{' '}
+        <a
+          className="help-link"
+          href="https://www.nytimes.com/games/connections"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          NYT Connections
+        </a>
+        .
       </p>
     </div>
   );
@@ -99,9 +123,26 @@ function CrypticHowTo() {
           <li><strong>Fodder:</strong> “tinsel” → anagram of TINSEL = LISTEN</li>
         </ul>
       </div>
+      <p>
+        The <strong>indicator</strong> is the key: it tells you <em>what kind of wordplay</em> to
+        perform on the <strong>fodder</strong>. “Broken” means anagram it, “hidden” means find a word
+        tucked inside it, “back” means reverse it, and so on. Spot the indicator and you know the trick.
+      </p>
       <p className="help-note">
         Stuck? Reveal the <strong>definition</strong>, the <strong>indicator</strong>, or the
         <strong> fodder</strong> one at a time to nudge yourself toward the answer.
+      </p>
+      <p className="help-note">
+        New to cryptics? Learn the ropes with{' '}
+        <a
+          className="help-link"
+          href="https://www.minutecryptic.com/guide"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          MinuteCryptic’s how-to-play course
+        </a>
+        .
       </p>
     </div>
   );

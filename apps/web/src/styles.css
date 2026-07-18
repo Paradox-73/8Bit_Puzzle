@@ -391,6 +391,38 @@ button:focus-visible,
 .input--upper {
   text-transform: uppercase;
 }
+/* Input with a fixed, non-editable suffix (e.g. the "@gmail.com" domain lock). */
+.input-affix {
+  display: flex;
+  align-items: stretch;
+  min-height: var(--tap);
+  background: var(--bg-elev);
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.input-affix:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.input--affixed {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.input-affix__suffix {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  white-space: nowrap;
+  border-left: 3px solid var(--border);
+}
 input[type='range'] {
   accent-color: var(--green);
 }
@@ -580,33 +612,6 @@ input[type='range'] {
   justify-content: space-between;
   align-items: center;
 }
-/* Pre-launch trial banner (only shown while trial mode is on). */
-.trial-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--bg-elev);
-  border: 3px dashed var(--accent-2);
-  border-radius: var(--radius);
-  padding: 8px 12px;
-  margin-bottom: 10px;
-}
-.trial-banner__tag {
-  font-family: var(--font-display);
-  font-size: 0.55rem;
-  letter-spacing: 1px;
-  color: var(--accent-2);
-}
-.trial-banner__progress {
-  font-size: 1rem;
-  color: var(--text-dim);
-  margin-right: auto;
-}
-.trial-banner__nav {
-  display: inline-flex;
-  gap: 8px;
-}
 /* "Campus word" heads-up for non-dictionary wordle/cryptic answers. */
 .campus-badge {
   display: inline-block;
@@ -618,114 +623,6 @@ input[type='range'] {
   border-radius: var(--radius);
   padding: 3px 8px;
   margin: 0 0 10px;
-}
-
-/* Player puzzle-rating widget (trial only) */
-.trial-fb {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 3px dashed var(--accent-2);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  margin-top: 14px;
-}
-.trial-fb__label {
-  font-family: var(--font-display);
-  font-size: 0.5rem;
-  letter-spacing: 1px;
-  color: var(--accent-2);
-}
-.trial-fb__stars {
-  display: flex;
-  gap: 4px;
-}
-.trial-fb__star {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.7rem;
-  line-height: 1;
-  padding: 0;
-  color: var(--border);
-}
-.trial-fb__star--on {
-  color: var(--yellow);
-}
-.trial-fb__msg {
-  resize: vertical;
-}
-
-/* Admin trial dashboard */
-.admin-trial {
-  border: 3px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-bottom: 16px;
-  background: var(--bg-elev);
-}
-.admin-trial__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.admin-trial__actions {
-  display: flex;
-  gap: 8px;
-}
-.admin-trial__summary {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  font-size: 1.05rem;
-  margin: 8px 0;
-}
-.admin-trial__sub {
-  font-family: var(--font-display);
-  font-size: 0.5rem;
-  letter-spacing: 1px;
-  color: var(--accent-2);
-  margin: 12px 0 6px;
-}
-.admin-trial__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.95rem;
-}
-.admin-trial__table th,
-.admin-trial__table td {
-  border: 2px solid var(--border);
-  padding: 4px 6px;
-  text-align: left;
-}
-.admin-trial__table th {
-  font-family: var(--font-display);
-  font-size: 0.42rem;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-}
-.admin-trial__comments {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.admin-trial__comments li {
-  border-left: 3px solid var(--accent-2);
-  padding: 4px 8px;
-  display: flex;
-  flex-direction: column;
-}
-.admin-trial__cmeta {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-.admin-trial__ctext {
-  font-size: 1rem;
 }
 
 /* Whole header doubles as the collapse toggle. */
@@ -2048,6 +1945,14 @@ input[type='range'] {
   padding: 8px 10px;
   background: var(--bg-elev-2);
   border-left: 3px solid var(--accent);
+}
+.help-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.help-link:hover {
+  color: var(--accent-2);
 }
 .help-example {
   background: var(--bg-elev-2);

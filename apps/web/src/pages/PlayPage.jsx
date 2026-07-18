@@ -6,7 +6,6 @@ import WordleGame from './WordleGame.jsx';
 import ConnectionsGame from './ConnectionsGame.jsx';
 import CrypticGame from './CrypticGame.jsx';
 import HelpModal from '../components/HelpModal.jsx';
-import TrialFeedback from '../components/TrialFeedback.jsx';
 
 // Supported games. Default is wordle. The selected game lives in the
 // ?game= query param so it is bookmarkable, e.g. /play?game=connections.
@@ -44,17 +43,13 @@ export default function PlayPage() {
   // away from can't overwrite the new puzzle (the switch-leaves-old-puzzle bug, worse on mobile).
   const reqGame = useRef(game);
 
-  // Pass a 1-based trialIndex to jump to that puzzle in the trial walk (Back/Next); omit it to land
-  // on today's puzzle (daily flow) or resume at the first unfinished trial puzzle.
-  const load = useCallback(async (trialIndex) => {
+  const load = useCallback(async () => {
     reqGame.current = game;
     setLoading(true);
     setNoPuzzle(false);
     setPuzzle(null);
     try {
-      const data = trialIndex != null
-        ? await api.getTrialAt(game, trialIndex)
-        : await api.getToday(game);
+      const data = await api.getToday(game);
       if (reqGame.current !== game) return; // superseded by a newer tab switch — drop this result
       setPuzzle(data);
     } catch (err) {
@@ -135,45 +130,7 @@ export default function PlayPage() {
         </p>
       )}
 
-      {/* Pre-launch playtest: walk every puzzle back-to-back, no daily limit. Server-driven —
-          this only renders while trial mode is on, and disappears entirely once it's off. */}
-      {puzzle?.trial && !puzzle.trialDone && (
-        <div className="trial-banner">
-          <span className="trial-banner__tag">🧪 TRIAL</span>
-          <span className="trial-banner__progress">
-            Puzzle {puzzle.trialIndex} of {puzzle.trialTotal}
-            {puzzle.trialAllDone ? ' · all done 🎉 — revisit any' : ' · no daily limit'}
-          </span>
-          <span className="trial-banner__nav">
-            <button
-              className="btn btn--small btn--ghost"
-              onClick={() => load(puzzle.trialIndex - 1)}
-              disabled={!puzzle.trialHasPrev}
-            >
-              ← Back
-            </button>
-            <button
-              className="btn btn--small"
-              onClick={() => load(puzzle.trialIndex + 1)}
-              disabled={!puzzle.trialHasNext}
-            >
-              Next →
-            </button>
-          </span>
-        </div>
-      )}
-
       {loading && <div className="loading">Loading puzzle…</div>}
-
-      {!loading && puzzle?.trialDone && (
-        <div className="empty">
-          <p>
-            {puzzle.trialTotal > 0
-              ? `🎉 You've played all ${puzzle.trialTotal} ${TITLES[game]} puzzles. Thanks for testing!`
-              : `No ${TITLES[game]} puzzles to test yet.`}
-          </p>
-        </div>
-      )}
 
       {!loading && noPuzzle && (
         <div className="empty conn-empty">
@@ -192,16 +149,15 @@ export default function PlayPage() {
 
       {/* The board lives in a wrapper keyed by `game`. This is load-bearing: the board is the one
           child whose component type AND key both change on a tab switch, and it sits among sibling
-          blocks (trial banner, loading, empty states) that toggle on/off mid-load. React reconciles
+          blocks (loading, empty states) that toggle on/off mid-load. React reconciles
           that keyed element against those toggling unkeyed siblings positionally and can fail to
           unmount it — leaving the previous game's grid/keyboard orphaned in the DOM while the new
           board renders below it (the "new puzzle comes below and doesn't switch" bug, worse on slow
           networks where the loading window is longer; a full refresh hid it). Keying the wrapper by
           `game` forces React to drop the whole previous-game subtree on every switch.
-          The wrapper is `display:contents` so it adds no layout box (see styles.css). The inner
-          puzzleId key still remounts within a game, e.g. the trial "Next puzzle" walk. */}
+          The wrapper is `display:contents` so it adds no layout box (see styles.css). */}
       <div className="game-mount" key={game}>
-        {!loading && puzzle && !puzzle.trialDone && puzzle.gameType === game && (
+        {!loading && puzzle && puzzle.gameType === game && (
           game === 'connections' ? (
             <ConnectionsGame key={puzzle.puzzleId} puzzle={puzzle} reload={load} />
           ) : game === 'cryptic' ? (
@@ -211,10 +167,6 @@ export default function PlayPage() {
           )
         )}
       </div>
-
-      {puzzle?.trial && !puzzle.trialDone && puzzle.puzzleId && (
-        <TrialFeedback key={puzzle.puzzleId} puzzle={puzzle} />
-      )}
 
       {showHelp && (
         <HelpModal game={game} onClose={() => setShowHelp(false)} />

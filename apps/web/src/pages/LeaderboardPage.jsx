@@ -50,15 +50,6 @@ export default function LeaderboardPage() {
     <div className="page page--leaderboard">
       <h1 className="page-title">★ Leaderboard</h1>
 
-      {board?.trial && (
-        <div className="trial-banner">
-          <span className="trial-banner__tag">🧪 TRIAL</span>
-          <span className="trial-banner__progress">
-            Live playtest standings — total score across all puzzles you've played.
-          </span>
-        </div>
-      )}
-
       <div className="segmented lb-games" role="tablist" aria-label="Choose game">
         {GAMES.map((g) => (
           <button
@@ -73,7 +64,7 @@ export default function LeaderboardPage() {
         ))}
       </div>
 
-      {!board?.trial && <BatchWarBar data={batchWar} />}
+      <BatchWarBar data={batchWar} />
 
       <div className="lb-filter-row">
         <div className="tabs">

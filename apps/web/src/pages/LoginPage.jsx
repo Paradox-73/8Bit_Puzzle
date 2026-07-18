@@ -13,12 +13,15 @@ export default function LoginPage() {
   const location = useLocation();
   const from = location.state?.from || '/';
 
-  const [email, setEmail] = useState('');
+  // We only accept @gmail.com addresses, so the user types just the handle and we append the domain.
+  const [emailLocal, setEmailLocal] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [username, setUsername] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState('details'); // 'details' | 'code'
   const [busy, setBusy] = useState(false);
+
+  const email = emailLocal.trim().toLowerCase() + '@gmail.com';
 
   // Step 1: create-or-login + email a code.
   const sendCode = async (e) => {
@@ -27,7 +30,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await start({
-        email: email.trim().toLowerCase(),
+        email,
         rollNumber: rollNumber.trim(),
         username: username.trim(),
       });
@@ -46,7 +49,7 @@ export default function LoginPage() {
     if (busy) return;
     setBusy(true);
     try {
-      await verifyCode(email.trim().toLowerCase(), code.trim());
+      await verifyCode(email, code.trim());
       navigate(from, { replace: true });
     } catch (err) {
       toast(err.message || 'Invalid code', { type: 'error' });
@@ -71,15 +74,20 @@ export default function LoginPage() {
             </p>
             <label className="field">
               <span className="field__label">Email</span>
-              <input
-                className="input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                placeholder="you@gmail.com"
-                required
-              />
+              <div className="input-affix">
+                <input
+                  className="input input--affixed"
+                  type="text"
+                  value={emailLocal}
+                  // Strip anything from '@' on — the domain is fixed to gmail.com.
+                  onChange={(e) => setEmailLocal(e.target.value.replace(/@.*/, '').trim())}
+                  autoComplete="username"
+                  inputMode="email"
+                  placeholder="yourname"
+                  required
+                />
+                <span className="input-affix__suffix">@gmail.com</span>
+              </div>
             </label>
             <label className="field">
               <span className="field__label">Roll Number</span>
