@@ -187,4 +187,7 @@ export const api = {
   adminApprove: (id) => request(`/admin/puzzles/${id}/approve`, { method: 'POST' }),
   adminSchedule: (id) => request(`/admin/puzzles/${id}/schedule`, { method: 'POST' }),
   adminDeletePuzzle: (id) => request(`/admin/puzzles/${id}`, { method: 'DELETE' }),
+
+  // ADMIN · live-play stats (how the juniors are doing)
+  adminStats: () => request('/admin/stats'),
 };

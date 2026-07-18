@@ -7,6 +7,7 @@ import WordleGrid from '../components/WordleGrid.jsx';
 import Keyboard, { computeKeyStates } from '../components/Keyboard.jsx';
 import ResultModal from '../components/ResultModal.jsx';
 import EasterEggModal from '../components/EasterEggModal.jsx';
+import { decodeSolution, scoreWordle, wordleSolved, wordleHint } from '../cipher.js';
 
 // Compact 💡 hint control that lives in the page header next to the "?". Tapping
 // it opens a small popover with the reveal buttons + any letters already revealed.
@@ -90,6 +91,12 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
   const [hinting, setHinting] = useState(false);
   const [warning, setWarning] = useState(null);
 
+  // Decrypted answer → evaluate guesses/hints locally for instant feedback (no server round-trip).
+  const sol = useMemo(() => decodeSolution(initialPuzzle.solution), [initialPuzzle.solution]);
+  const answer = sol?.answer ? String(sol.answer).toUpperCase() : null;
+  // Serialises the background record-to-server calls so they reach the server in guess order.
+  const sendChain = useRef(Promise.resolve());
+
   const wordLength = puzzle?.config?.wordLength || 5;
   const maxGuesses = puzzle?.config?.maxGuesses || 6;
 
@@ -103,6 +110,13 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
   const revealHint = useCallback(
     async (kind) => {
       if (hinting || isOver || hints.some((h) => h.kind === kind)) return;
+      // Client-side hint: instant, computed from the decrypted answer (no server round-trip).
+      if (answer) {
+        const h = wordleHint(answer, kind, hints);
+        if (h) setHints((hs) => (hs.some((x) => x.kind === kind) ? hs : [...hs, h]));
+        else toast('Today’s word has no ' + kind + ' to reveal', { type: 'warn' });
+        return;
+      }
       setHinting(true);
       try {
         const res = await api.hint(puzzle.puzzleId, kind);
@@ -116,7 +130,7 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
         setHinting(false);
       }
     },
-    [hinting, isOver, hints, puzzle, toast]
+    [hinting, isOver, hints, puzzle, toast, answer]
   );
 
   // Pull streak for result screen.
@@ -144,8 +158,43 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
       toast('Not enough letters', { type: 'warn', duration: 1400 });
       return;
     }
-    setSubmitting(true);
     const attempt = current.toUpperCase();
+
+    // --- Fast path: evaluate locally, render instantly, record to the server in the background. ---
+    if (answer) {
+      const pattern = scoreWordle(attempt, answer);
+      const newGuesses = [...guesses, { guess: attempt, result: pattern }];
+      setGuesses(newGuesses);
+      setCurrent('');
+      const solved = wordleSolved(pattern);
+      const over = solved || newGuesses.length >= maxGuesses;
+
+      // Keeps stats/leaderboard/streak updated and lets a reload resume mid-game (server stores guesses).
+      sendChain.current = sendChain.current
+        .then(() => api.guess(puzzle.puzzleId, attempt))
+        .then((res) => {
+          if (res?.easterEgg) setEgg(res.easterEgg);
+          if (res?.warning) {
+            setWarning(res.warning);
+            toast(res.warning, { type: 'warn', duration: 7000 });
+          }
+          if (res?.gameOver) {
+            refreshUser().then((me) => { if (me?.stats) setStreak(me.stats.currentStreak); });
+          }
+        })
+        .catch(() => {});
+
+      if (over) {
+        const status = solved ? 'SOLVED' : 'FAILED';
+        setPuzzle((p) => ({ ...p, status, answer, guesses: newGuesses }));
+        setResult({ solved, answer, shareGrid: null, status });
+        setShowResult(true);
+      }
+      return;
+    }
+
+    // --- Fallback: server-authoritative (only if the solution blob was missing). ---
+    setSubmitting(true);
     try {
       const res = await api.guess(puzzle.puzzleId, attempt);
       const newGuesses = [...guesses, { guess: attempt, result: res.result }];
@@ -195,10 +244,13 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
     puzzle,
     current,
     wordLength,
+    maxGuesses,
     guesses,
+    answer,
     triggerShake,
     toast,
     reload,
+    refreshUser,
   ]);
 
   const handleKey = useCallback(

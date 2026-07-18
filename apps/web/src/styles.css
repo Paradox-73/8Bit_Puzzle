@@ -1954,6 +1954,48 @@ input[type='range'] {
 .help-link:hover {
   color: var(--accent-2);
 }
+
+/* Admin live-play stats dashboard */
+.admin-stats {
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+  background: var(--bg-elev);
+}
+.admin-stats__summary {
+  font-size: 1.05rem;
+  color: var(--text-dim);
+  margin: 4px 0 10px;
+}
+.admin-stats__sub {
+  font-family: var(--font-display);
+  font-size: 0.5rem;
+  letter-spacing: 1px;
+  color: var(--accent-2);
+  margin: 14px 0 6px;
+}
+.admin-stats__wrap {
+  overflow-x: auto;
+}
+.admin-stats__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.admin-stats__table th,
+.admin-stats__table td {
+  border: 2px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.admin-stats__table th {
+  font-family: var(--font-display);
+  font-size: 0.42rem;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
 .help-example {
   background: var(--bg-elev-2);
   border: 2px solid var(--border);
@@ -2081,6 +2123,13 @@ input[type='range'] {
   margin-bottom: 2px;
 }
 .cryptic-hint__text { font-size: var(--fs-sm); }
+.cryptic-hint__how {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
 
 /* ---- Cryptic parse in result modal ---- */
 .cryptic-parse {

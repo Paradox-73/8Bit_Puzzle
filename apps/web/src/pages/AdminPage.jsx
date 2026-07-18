@@ -30,6 +30,89 @@ const GAMES = [
   { type: 'cryptic', label: 'Cryptic' },
 ];
 
+const GAME_LABEL = { wordle: 'Wordle', connections: 'Connections', cryptic: 'Cryptic' };
+const fmtTime = (ms) => (!ms ? '—' : ms >= 60000 ? `${Math.round(ms / 60000)}m` : `${Math.round(ms / 1000)}s`);
+
+// Live-play stats dashboard: how the juniors are actually doing (from /admin/stats).
+function LiveStats() {
+  const { toast } = useToast();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .adminStats()
+      .then((d) => alive && setData(d))
+      .catch((err) => alive && toast(err.message || 'Failed to load stats', { type: 'error' }))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [toast]);
+
+  if (loading) return <div className="loading">Loading stats…</div>;
+  if (!data) return null;
+
+  return (
+    <section className="admin-stats">
+      <h2 className="section-title">📊 Live play — juniors</h2>
+      <p className="admin-stats__summary">
+        {data.totalSolves} solves across {data.totalFinished} finished games
+      </p>
+      <div className="admin-stats__wrap">
+        <table className="admin-stats__table">
+          <thead>
+            <tr>
+              <th>Game</th><th>Played</th><th>Solved</th><th>Rate</th>
+              <th>Avg time</th><th>Avg tries</th><th>Players</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.byGame || []).map((g) => (
+              <tr key={g.game}>
+                <td>{GAME_LABEL[g.game] || g.game}</td>
+                <td>{g.attempts}</td>
+                <td>{g.solves}</td>
+                <td>{g.solveRate}%</td>
+                <td>{fmtTime(g.avgMs)}</td>
+                <td>{g.avgMoves}</td>
+                <td>{g.players}</td>
+              </tr>
+            ))}
+            {(!data.byGame || data.byGame.length === 0) && (
+              <tr><td colSpan={7}>No finished games yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {data.players?.length > 0 && (
+        <>
+          <h3 className="admin-stats__sub">Top players</h3>
+          <div className="admin-stats__wrap">
+            <table className="admin-stats__table">
+              <thead>
+                <tr><th>Player</th><th>Batch</th><th>Solved</th><th>Played</th></tr>
+              </thead>
+              <tbody>
+                {data.players.slice(0, 25).map((p) => (
+                  <tr key={p.username}>
+                    <td>{p.username}</td>
+                    <td>’{String(p.batchYear ?? '').slice(-2)}</td>
+                    <td>{p.solves}</td>
+                    <td>{p.attempts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 // Group difficulty colours, easiest → hardest (matches the in-game scheme).
 const CONN_COLORS = ['🟡 Yellow · easiest', '🟢 Green', '🔵 Blue', '🟣 Purple · hardest'];
 const CRYPTIC_FIELDS = [
@@ -290,6 +373,8 @@ export default function AdminPage() {
   return (
     <div className="page page--admin">
       <h1 className="page-title">⚙ Admin · {gameLabel}</h1>
+
+      <LiveStats />
 
       <div className="segmented" role="tablist" aria-label="Choose game to manage">
         {GAMES.map((g) => (

@@ -35,4 +35,39 @@ public interface AttemptRepository extends JpaRepository<Attempt, Long> {
             GROUP BY u.program, u.batch_year
             """, nativeQuery = true)
     List<Object[]> solversByCohort(@Param("date") LocalDate date, @Param("type") String type);
+
+    /** Per-(game type, #moves) counts for ONE user's solved attempts — builds the profile distributions. */
+    @Query(value = """
+            SELECT p.game_type AS gameType, jsonb_array_length(a.guesses) AS moves, COUNT(*) AS cnt
+            FROM attempts a JOIN puzzles p ON p.id = a.puzzle_id
+            WHERE a.user_id = :userId AND a.solved = true AND a.finished_at IS NOT NULL
+            GROUP BY p.game_type, jsonb_array_length(a.guesses)
+            """, nativeQuery = true)
+    List<Object[]> solvedMovesByGame(@Param("userId") long userId);
+
+    /** Admin dashboard: per game type across ALL players — finished, solves, avg time, avg moves, players. */
+    @Query(value = """
+            SELECT p.game_type AS gameType, COUNT(*) AS attempts,
+                   SUM(CASE WHEN a.solved THEN 1 ELSE 0 END) AS solves,
+                   AVG(a.completion_ms) AS avgMs, AVG(jsonb_array_length(a.guesses)) AS avgMoves,
+                   COUNT(DISTINCT a.user_id) AS players
+            FROM attempts a JOIN puzzles p ON p.id = a.puzzle_id
+            WHERE a.finished_at IS NOT NULL
+            GROUP BY p.game_type
+            ORDER BY p.game_type
+            """, nativeQuery = true)
+    List<Object[]> liveStatsByGame();
+
+    /** Admin dashboard: top players by total solves across all games. */
+    @Query(value = """
+            SELECT a.user_id AS userId, COUNT(*) AS attempts,
+                   SUM(CASE WHEN a.solved THEN 1 ELSE 0 END) AS solves,
+                   MAX(a.finished_at) AS lastAt
+            FROM attempts a
+            WHERE a.finished_at IS NOT NULL
+            GROUP BY a.user_id
+            ORDER BY solves DESC, attempts DESC
+            LIMIT 100
+            """, nativeQuery = true)
+    List<Object[]> liveTopPlayers();
 }

@@ -16,37 +16,62 @@ function StatBox({ label, value }) {
   );
 }
 
-// NYT-style horizontal guess distribution (Wordle wins by number of guesses).
-function GuessDistribution({ dist }) {
-  if (!Array.isArray(dist) || dist.length === 0) return null;
+// Per-game distribution: Wordle/Cryptic by guesses-to-solve (1–6), Connections by mistakes (0–4).
+const DIST_GAMES = [
+  { key: 'wordle', label: 'Wordle', kind: 'guesses' },
+  { key: 'connections', label: 'Connections', kind: 'mistakes' },
+  { key: 'cryptic', label: 'Cryptic', kind: 'guesses' },
+];
+
+function Distributions({ distributions }) {
+  const [game, setGame] = useState('wordle');
+  if (!distributions) return null;
+  const cfg = DIST_GAMES.find((g) => g.key === game) || DIST_GAMES[0];
+  const dist = distributions[game] || [];
   const total = dist.reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    return (
-      <section className="titles">
-        <h2 className="section-title">Guess distribution</h2>
-        <p className="profile-meta">Solve a Wordle to start your distribution.</p>
-      </section>
-    );
-  }
   const max = Math.max(...dist, 1);
+
   return (
     <section className="titles">
-      <h2 className="section-title">Guess distribution</h2>
-      <div className="dist">
-        {dist.map((count, i) => (
-          <div className="dist-row" key={i}>
-            <span className="dist-row__label">{i + 1}</span>
-            <div className="dist-row__track">
-              <div
-                className="dist-row__bar"
-                style={{ width: `${Math.max(8, (count / max) * 100)}%` }}
-              >
-                <span className="dist-row__count">{count}</span>
-              </div>
-            </div>
-          </div>
+      <h2 className="section-title">Distribution</h2>
+      <div className="segmented" role="tablist" aria-label="Choose game" style={{ marginBottom: 10 }}>
+        {DIST_GAMES.map((g) => (
+          <button
+            key={g.key}
+            role="tab"
+            aria-selected={g.key === game}
+            className={'seg' + (g.key === game ? ' seg--active' : '')}
+            onClick={() => setGame(g.key)}
+          >
+            {g.label}
+          </button>
         ))}
       </div>
+
+      {total === 0 ? (
+        <p className="profile-meta">Solve a {cfg.label} puzzle to start your distribution.</p>
+      ) : (
+        <>
+          <div className="dist">
+            {dist.map((count, i) => (
+              <div className="dist-row" key={i}>
+                <span className="dist-row__label">{cfg.kind === 'mistakes' ? i : i + 1}</span>
+                <div className="dist-row__track">
+                  <div
+                    className="dist-row__bar"
+                    style={{ width: `${Math.max(8, (count / max) * 100)}%` }}
+                  >
+                    <span className="dist-row__count">{count}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="profile-meta">
+            {cfg.kind === 'mistakes' ? 'Mistakes made on solved boards (0–4)' : 'Guesses used to solve'}
+          </p>
+        </>
+      )}
     </section>
   );
 }
@@ -119,7 +144,7 @@ export default function ProfilePage() {
             <StatBox label="Solved" value={stats.totalSolved ?? 0} />
           </section>
 
-          <GuessDistribution dist={stats.guessDistribution} />
+          <Distributions distributions={stats.distributions} />
 
           {Array.isArray(stats.titles) && stats.titles.length > 0 && (
             <section className="titles">

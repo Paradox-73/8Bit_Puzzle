@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ConnectionsBoard from '../components/ConnectionsBoard.jsx';
 import EasterEggModal from '../components/EasterEggModal.jsx';
 import ConnectionsResultModal from '../components/ConnectionsResultModal.jsx';
+import { decodeSolution, connectionsGroups, judgeConnections } from '../cipher.js';
 
 // Returns the set of all tile strings that belong to already-solved groups.
 function solvedMembers(solvedGroups) {
@@ -41,6 +42,12 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
   const [streak, setStreak] = useState(null);
   const [hints, setHints] = useState(initialPuzzle.hints || []);
   const [hinting, setHinting] = useState(false);
+
+  // Decrypted groups → judge selections + hints locally (instant). Queue of groups still to reveal
+  // one-tap-at-a-time once the game ends.
+  const sol = useMemo(() => decodeSolution(initialPuzzle.solution), [initialPuzzle.solution]);
+  const groups = useMemo(() => connectionsGroups(sol), [sol]);
+  const sendChain = useRef(Promise.resolve());
 
   const groupSize = puzzle?.config?.groupSize || 4;
   const maxMistakes = puzzle?.config?.maxMistakes || 4;
@@ -105,21 +112,58 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
     setTiles((t) => shuffle(t));
   }, []);
 
-  const revealHint = useCallback(async () => {
-    if (hinting || isOver || hints.length > 0) return;
-    setHinting(true);
-    try {
-      const res = await api.hint(puzzle.puzzleId, 'anchors');
-      setHints(res.hints || []);
-    } catch (err) {
-      toast(
-        err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
-        { type: 'warn' }
-      );
-    } finally {
-      setHinting(false);
+  // Client-side hint, tap-by-tap: each tap reveals ONE more group's anchor word (lowest level first),
+  // instead of revealing all four at once.
+  const revealHint = useCallback(() => {
+    if (hinting || isOver) return;
+    if (groups.length) {
+      const anchored = new Set(hints.map((h) => h.level));
+      const solvedLv = new Set(solvedGroups.map((g) => g.level));
+      const cand = groups
+        .filter((g) => !solvedLv.has(g.level) && !anchored.has(g.level))
+        .sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+      if (!cand.length) return;
+      const g = cand[0];
+      const word = g.members[Math.floor(Math.random() * g.members.length)];
+      setHints((hs) => [...hs, { level: g.level, word }]);
+      return;
     }
-  }, [hinting, isOver, hints, puzzle, toast]);
+    setHinting(true);
+    (async () => {
+      try {
+        const res = await api.hint(puzzle.puzzleId, 'anchors');
+        setHints(res.hints || []);
+      } catch (err) {
+        toast(
+          err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
+          { type: 'warn' }
+        );
+      } finally {
+        setHinting(false);
+      }
+    })();
+  }, [hinting, isOver, hints, groups, solvedGroups, puzzle, toast]);
+
+  // Loss reveal: dump the missed groups one after another automatically (like NYT Connections),
+  // then show the result modal.
+  const revealMissedSequentially = useCallback((queue) => {
+    if (!queue.length) {
+      setShowResult(true);
+      return;
+    }
+    const [next, ...rest] = queue;
+    setSolvedGroups((sg) => [...sg, next]);
+    setTiles((t) => t.filter((x) => !next.members.includes(x)));
+    setTimeout(() => revealMissedSequentially(rest), 700);
+  }, []);
+
+  // Whether another anchor hint can still be revealed (progressive).
+  const canHint = useMemo(() => {
+    if (!groups.length) return hints.length === 0;
+    const solvedLv = new Set(solvedGroups.map((g) => g.level));
+    const anchored = new Set(hints.map((h) => h.level));
+    return groups.some((g) => !solvedLv.has(g.level) && !anchored.has(g.level));
+  }, [groups, solvedGroups, hints]);
 
   const LEVEL_NAMES = ['Yellow', 'Green', 'Blue', 'Purple'];
 
@@ -130,8 +174,66 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
 
   const submit = useCallback(async () => {
     if (submitting || isOver || selected.length !== groupSize) return;
-    setSubmitting(true);
     const selection = selected.slice();
+
+    // --- Fast path: judge locally, render instantly, record to the server in the background. ---
+    if (groups.length) {
+      const judged = judgeConnections(groups, selection);
+      let newSolved = solvedGroups;
+      let newMistakes = mistakesUsed;
+
+      if (judged.correct) {
+        newSolved = [...solvedGroups, judged.group];
+        setSolvedGroups(newSolved);
+        setPopOut(selection);
+        setTimeout(() => {
+          setTiles((t) => t.filter((x) => !selection.includes(x)));
+          setPopOut([]);
+        }, 350);
+        setSelected([]);
+      } else {
+        newMistakes = mistakesUsed + 1;
+        setMistakesUsed(newMistakes);
+        if (judged.oneAway) {
+          toast('One away…', { type: 'warn', duration: 1600 });
+          triggerShake();
+        } else {
+          triggerShake();
+          setTimeout(() => setSelected([]), 450);
+        }
+      }
+
+      const won = newSolved.length === 4;
+      const over = won || newMistakes >= maxMistakes;
+
+      sendChain.current = sendChain.current
+        .then(() => api.move(puzzle.puzzleId, { selection }))
+        .then((res) => {
+          if (res?.easterEgg) setEgg(res.easterEgg);
+          if (res?.gameOver) {
+            refreshUser().then((me) => { if (me?.stats) setStreak(me.stats.currentStreak); });
+          }
+        })
+        .catch(() => {});
+
+      if (over) {
+        const allGroups = groups.slice().sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+        setPuzzle((p) => ({ ...p, status: won ? 'SOLVED' : 'FAILED' }));
+        setResult({ solved: won, shareGrid: null, status: won ? 'SOLVED' : 'FAILED', solvedGroups: allGroups });
+        if (won) {
+          setShowResult(true);
+        } else {
+          // Loss: auto-reveal the missed groups in sequence, then open the result.
+          const solvedLv = new Set(newSolved.map((g) => g.level));
+          const missed = allGroups.filter((g) => !solvedLv.has(g.level));
+          setTimeout(() => revealMissedSequentially(missed), 500);
+        }
+      }
+      return;
+    }
+
+    // --- Fallback: server-authoritative (only if the solution blob was missing). ---
+    setSubmitting(true);
     try {
       const res = await api.move(puzzle.puzzleId, { selection });
 
@@ -140,7 +242,6 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
       if (res.easterEgg) setEgg(res.easterEgg);
 
       if (res.correct) {
-        // Animate the 4 tiles out, then remove them from the grid.
         setPopOut(selection);
         setTimeout(() => {
           setTiles((t) => t.filter((x) => !selection.includes(x)));
@@ -150,7 +251,6 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
       } else if (res.oneAway) {
         toast('One away…', { type: 'warn', duration: 1600 });
         triggerShake();
-        // keep selection
       } else {
         triggerShake();
         setTimeout(() => setSelected([]), 450);
@@ -159,7 +259,6 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
       if (res.gameOver) {
         const status = res.status || (res.solved ? 'SOLVED' : 'FAILED');
         setPuzzle((p) => ({ ...p, status, score: res.score }));
-        // Reveal any remaining groups the server returned.
         const finalGroups = res.solvedGroups || solvedGroups;
         setResult({
           solved: !!res.solved,
@@ -168,7 +267,6 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
           status,
           solvedGroups: finalGroups,
         });
-        // Clear any tiles that are now part of revealed groups.
         const revealed = solvedMembers(finalGroups);
         setTiles((t) => t.filter((x) => !revealed.has(x)));
         setShowResult(true);
@@ -179,10 +277,7 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
       if (err instanceof ApiError) {
         if (err.code === 'BAD_SELECTION' || err.status === 400) {
           triggerShake();
-          toast(err.message || 'Pick exactly 4 valid tiles', {
-            type: 'error',
-            duration: 1800,
-          });
+          toast(err.message || 'Pick exactly 4 valid tiles', { type: 'error', duration: 1800 });
         } else if (err.code === 'ALREADY_FINISHED' || err.status === 409) {
           toast('Puzzle already finished — reloading.', { type: 'warn' });
           if (reload) await reload();
@@ -200,11 +295,16 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
     isOver,
     selected,
     groupSize,
-    puzzle,
+    groups,
     solvedGroups,
+    mistakesUsed,
+    maxMistakes,
+    puzzle,
     toast,
     triggerShake,
     reload,
+    refreshUser,
+    revealMissedSequentially,
   ]);
 
   const mistakeDots = Array.from({ length: maxMistakes }, (_, i) => i < mistakesUsed);
@@ -275,9 +375,9 @@ export default function ConnectionsGame({ puzzle: initialPuzzle, reload }) {
           <button
             className="btn btn--ghost"
             onClick={revealHint}
-            disabled={hinting || hints.length > 0}
+            disabled={hinting || !canHint}
           >
-            💡 Hint
+            💡 Hint{hints.length > 0 ? ` (${hints.length})` : ''}
           </button>
           <button
             className="btn btn--primary"

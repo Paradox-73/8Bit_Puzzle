@@ -85,12 +85,12 @@ public class WordlePlay implements GamePlay {
     public MoveStep step(Puzzle p, Attempt attempt, Map<String, Object> move) {
         Object raw = move.get("guess");
         String guess = raw == null ? "" : raw.toString().trim().toUpperCase();
-        if (guess.length() != WordleEngine.WORD_LENGTH) {
+        if (!guess.matches("[A-Z]{5}")) {
             throw ApiException.badRequest("BAD_LENGTH", "Guess must be 5 letters");
         }
-        if (!wordList.isAllowed(guess)) {
-            throw ApiException.badRequest("NOT_IN_WORD_LIST", "Not in word list");
-        }
+        // Dictionary enforcement is intentionally relaxed: the browser now evaluates guesses locally
+        // (for instant feedback) and this call only records the attempt, so we must accept exactly what
+        // the client accepted. Answers already include non-dictionary campus words (IIITB, MAGGI).
         List<String> pattern = engine.score(guess, p.answer());
         attempt.getGuesses().add(guess);
         int used = attempt.getGuesses().size();

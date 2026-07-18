@@ -3,6 +3,7 @@ import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ResultModal from '../components/ResultModal.jsx';
+import { decodeSolution, crypticCorrect, crypticHint, normalizeCryptic } from '../cipher.js';
 
 const HINT_KINDS = [
   { kind: 'definition', label: 'Definition' },
@@ -68,6 +69,10 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
 
   const maxGuesses = puzzle?.config?.maxGuesses || 6;
 
+  // Decrypted solution → check answers + build teaching hints locally (instant, no round-trip).
+  const sol = useMemo(() => decodeSolution(initialPuzzle.solution), [initialPuzzle.solution]);
+  const sendChain = useRef(Promise.resolve());
+
   // Letter-box answer entry sized to the enumeration, e.g. "(3,4)" -> [3,4] (7 cells in two groups).
   const segments = useMemo(() => parseEnumeration(puzzle.enumeration), [puzzle.enumeration]);
   const total = useMemo(() => segments.reduce((a, b) => a + b, 0), [segments]);
@@ -110,22 +115,31 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
   const hasHint = (kind) => hints.some((h) => h.kind === kind);
 
   const revealHint = useCallback(
-    async (kind) => {
+    (kind) => {
       if (hinting || isOver || hints.some((h) => h.kind === kind)) return;
-      setHinting(true);
-      try {
-        const res = await api.hint(puzzle.puzzleId, kind);
-        setHints(res.hints || []);
-      } catch (err) {
-        toast(
-          err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
-          { type: 'warn' }
-        );
-      } finally {
-        setHinting(false);
+      // Client-side teaching hint: shows the part AND how to use it (from the decrypted device).
+      if (sol) {
+        const h = crypticHint(sol, kind);
+        if (h && h.text) setHints((hs) => (hs.some((x) => x.kind === kind) ? hs : [...hs, h]));
+        else toast(`No ${kind} hint for today’s clue`, { type: 'warn' });
+        return;
       }
+      setHinting(true);
+      (async () => {
+        try {
+          const res = await api.hint(puzzle.puzzleId, kind);
+          setHints(res.hints || []);
+        } catch (err) {
+          toast(
+            err instanceof ApiError ? err.message || 'No hint available' : 'No hint available',
+            { type: 'warn' }
+          );
+        } finally {
+          setHinting(false);
+        }
+      })();
     },
-    [hinting, isOver, hints, puzzle, toast]
+    [hinting, isOver, hints, sol, puzzle, toast]
   );
 
   const submitGuess = useCallback(
@@ -136,8 +150,43 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
         toast('Type your answer', { type: 'warn', duration: 1400 });
         return;
       }
-      setSubmitting(true);
       const attempt = current.trim();
+
+      // --- Fast path: check locally, render instantly, record to the server in the background. ---
+      if (sol?.answer) {
+        const requiredLen = total > 0 ? total : normalizeCryptic(sol.answer).length;
+        if (normalizeCryptic(attempt).length !== requiredLen) {
+          toast(`Answer has ${requiredLen} letters`, { type: 'error', duration: 1600 });
+          return;
+        }
+        const correct = crypticCorrect(attempt, sol.answer);
+        const newGuesses = [...guesses, { guess: attempt.toUpperCase(), correct }];
+        setGuesses(newGuesses);
+        setCurrent('');
+        const over = correct || newGuesses.length >= maxGuesses;
+
+        sendChain.current = sendChain.current
+          .then(() => api.guess(puzzle.puzzleId, attempt))
+          .then((res) => {
+            if (res?.gameOver) {
+              refreshUser().then((me) => { if (me?.stats) setStreak(me.stats.currentStreak); });
+            }
+          })
+          .catch(() => {});
+
+        if (over) {
+          const status = correct ? 'SOLVED' : 'FAILED';
+          setPuzzle((p) => ({ ...p, status }));
+          setResult(toResult({ ...sol, guessesUsed: newGuesses.length }, status, puzzle.clue));
+          setShowResult(true);
+        } else {
+          toast('Not quite — try again', { type: 'warn', duration: 1400 });
+        }
+        return;
+      }
+
+      // --- Fallback: server-authoritative (only if the solution blob was missing). ---
+      setSubmitting(true);
       try {
         const res = await api.guess(puzzle.puzzleId, attempt);
         setGuesses((prev) => [...prev, { guess: attempt.toUpperCase(), correct: res.correct }]);
@@ -168,7 +217,7 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
         setSubmitting(false);
       }
     },
-    [submitting, isOver, puzzle, current, toast, reload]
+    [submitting, isOver, puzzle, current, sol, total, guesses, maxGuesses, toast, reload, refreshUser]
   );
 
   const triesLeft = Math.max(0, maxGuesses - guesses.length);
@@ -277,6 +326,7 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
                   <div key={h.kind} className="cryptic-hint">
                     <span className="cryptic-hint__kind">{h.kind}</span>
                     <span className="cryptic-hint__text">{h.text}</span>
+                    {h.how && <span className="cryptic-hint__how">{h.how}</span>}
                   </div>
                 ))}
               </div>

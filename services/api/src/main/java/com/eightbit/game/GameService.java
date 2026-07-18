@@ -3,8 +3,10 @@ package com.eightbit.game;
 import com.eightbit.auth.UserRepository;
 import com.eightbit.auth.User;
 import com.eightbit.auth.otp.EmailSender;
+import com.eightbit.common.PayloadCipher;
 import com.eightbit.common.ratelimit.RateLimiter;
 import com.eightbit.common.web.ApiException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.eightbit.game.dto.GameDtos.AttemptSummary;
 import com.eightbit.game.event.PuzzleCompletedEvent;
 import com.eightbit.game.play.GamePlay;
@@ -48,10 +50,13 @@ public class GameService {
     private final ApplicationEventPublisher events;
     private final EmailSender email;
     private final String teamEmail;
+    private final PayloadCipher cipher;
+    private final ObjectMapper mapper;
 
     public GameService(PuzzleRepository puzzles, AttemptRepository attempts, List<GamePlay> playList,
                        StatsService statsService, EasterEggService easterEggs, RateLimiter rateLimiter,
                        UserRepository users, ApplicationEventPublisher events, EmailSender email,
+                       PayloadCipher cipher, ObjectMapper mapper,
                        @Value("${app.feedback.to:8bit@iiitb.ac.in}") String teamEmail) {
         this.puzzles = puzzles;
         this.attempts = attempts;
@@ -62,6 +67,8 @@ public class GameService {
         this.users = users;
         this.events = events;
         this.email = email;
+        this.cipher = cipher;
+        this.mapper = mapper;
         this.teamEmail = teamEmail;
     }
 
@@ -117,7 +124,21 @@ public class GameService {
         } else {
             view.put("score", null);
         }
+        addSolution(view, p);
         return view;
+    }
+
+    /**
+     * Ship the day's full content (answer / groups / cryptic parse) as an obfuscated blob so the
+     * browser can evaluate guesses and hints locally with no server round-trip (the lag you feel on
+     * Enter). Decoded client-side in cipher.js. The finished result is still recorded server-side.
+     */
+    private void addSolution(Map<String, Object> view, Puzzle p) {
+        try {
+            view.put("solution", cipher.encode(mapper.writeValueAsString(p.getContent())));
+        } catch (Exception e) {
+            log.warn("Failed to encode solution blob for puzzle {}: {}", p.getId(), e.toString());
+        }
     }
 
     /** Flag a puzzle whose answer isn't a normal dictionary word (IIITB term / brand), so the
