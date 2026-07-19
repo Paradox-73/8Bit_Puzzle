@@ -3,7 +3,7 @@ import { api, ApiError } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ResultModal from '../components/ResultModal.jsx';
-import { decodeSolution, crypticCorrect, crypticHint, normalizeCryptic } from '../cipher.js';
+import { decodeSolution, crypticCorrect, crypticHint, normalizeCryptic, loadHints, saveHints } from '../cipher.js';
 
 const HINT_KINDS = [
   { kind: 'definition', label: 'Definition' },
@@ -57,7 +57,9 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
   const [guesses, setGuesses] = useState(initialPuzzle.guesses || []);
   const [current, setCurrent] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [hints, setHints] = useState(initialPuzzle.hints || []);
+  const [hints, setHints] = useState(() =>
+    loadHints(initialPuzzle.puzzleId, initialPuzzle.hints || [])
+  );
   const [hinting, setHinting] = useState(false);
   const [streak, setStreak] = useState(null);
   const [showResult, setShowResult] = useState(false);
@@ -113,6 +115,11 @@ export default function CrypticGame({ puzzle: initialPuzzle, reload }) {
   }, [isOver, refreshUser]);
 
   const hasHint = (kind) => hints.some((h) => h.kind === kind);
+
+  // Persist revealed hints per-puzzle so they survive a refresh.
+  useEffect(() => {
+    saveHints(puzzle.puzzleId, hints);
+  }, [hints, puzzle.puzzleId]);
 
   const revealHint = useCallback(
     (kind) => {

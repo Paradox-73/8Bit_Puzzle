@@ -34,6 +34,8 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # --- Feedback / bug-report recipient (falls back to the team address) ---
+      APP_FEEDBACK_TO: ${FEEDBACK_TO:-8bit@iiitb.ac.in}
       # --- Optional web push ---
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

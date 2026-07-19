@@ -106,7 +106,7 @@ export function crypticHint(sol, kind) {
     return {
       kind,
       text: sol.definition,
-      how: 'The straight definition — the answer means this. It’s always at the very start or the very end of the clue.',
+      how: 'The straight definition — the answer means this.',
     };
   }
   if (kind === 'indicator') {
@@ -124,4 +124,35 @@ export function crypticHint(sol, kind) {
     };
   }
   return null;
+}
+
+// --- Per-puzzle hint persistence ---------------------------------------------
+// Client-side hints are computed locally and never sent to the server, so the
+// /today payload can't restore them after a refresh. Persist them per puzzle in
+// localStorage so revealed hints survive a reload.
+function hintsKey(puzzleId) {
+  return '8bit.hints.' + puzzleId;
+}
+
+export function loadHints(puzzleId, serverHints = []) {
+  const byKind = new Map();
+  const add = (h) => {
+    if (h && h.kind && !byKind.has(h.kind)) byKind.set(h.kind, h);
+  };
+  serverHints.forEach(add);
+  try {
+    const stored = JSON.parse(localStorage.getItem(hintsKey(puzzleId)) || '[]');
+    if (Array.isArray(stored)) stored.forEach(add);
+  } catch {
+    /* corrupt/unavailable storage — fall back to server hints */
+  }
+  return [...byKind.values()];
+}
+
+export function saveHints(puzzleId, hints) {
+  try {
+    localStorage.setItem(hintsKey(puzzleId), JSON.stringify(hints || []));
+  } catch {
+    /* storage may be unavailable (private mode) — hints just won't persist */
+  }
 }

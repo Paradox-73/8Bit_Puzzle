@@ -70,6 +70,8 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # Where player feedback / bug reports are emailed (falls back to the team address).
+      APP_FEEDBACK_TO: ${FEEDBACK_TO:-8bit@iiitb.ac.in}
       # Admin master login code: typed in place of an emailed OTP for editor/admin accounts so an
       # admin is never locked out by email. KEEP SECRET (set in gitignored infra/.env).
       ADMIN_LOGIN_CODE: ${ADMIN_LOGIN_CODE:-}

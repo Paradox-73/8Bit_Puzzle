@@ -33,13 +33,16 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/(auth|puzzles|leaderboard|me|users|push|admin)\//],
         runtimeCaching: [
           {
-            // Cache today's puzzle so it can be played offline (stale-while-revalidate).
+            // Today's puzzle: always try the network first so a reopen on the next day gets the
+            // fresh puzzle, not yesterday's cached copy. The cache is only a fallback for offline
+            // play (where showing the last-seen puzzle is acceptable).
             urlPattern: ({ url }) =>
               url.pathname === '/puzzles/today' || url.pathname.endsWith('/puzzles/today'),
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             method: 'GET',
             options: {
               cacheName: 'puzzle-today',
+              networkTimeoutSeconds: 5,
               expiration: {
                 maxEntries: 8,
                 maxAgeSeconds: 60 * 60 * 24, // 1 day

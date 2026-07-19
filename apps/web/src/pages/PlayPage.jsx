@@ -74,6 +74,31 @@ export default function PlayPage() {
     load();
   }, [load]);
 
+  // An installed PWA is usually resumed (not reloaded) when reopened. If it's left open overnight
+  // and reopened the next day, React still holds yesterday's puzzle in memory with nothing to
+  // trigger a refetch. When we become visible again after the local date has changed, reload the
+  // puzzle and nudge the service worker to pick up any new deploy. (Local date = IST for the
+  // campus audience, matching the server's midnight rollover.)
+  const loadedDay = useRef(new Date().toDateString());
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState !== 'visible') return;
+      const today = new Date().toDateString();
+      if (today === loadedDay.current) return;
+      loadedDay.current = today;
+      load();
+      navigator.serviceWorker?.getRegistration()
+        .then((reg) => reg?.update())
+        .catch(() => {});
+    };
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('focus', onResume);
+    return () => {
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('focus', onResume);
+    };
+  }, [load]);
+
   // First-timer onboarding: auto-open the guide once per game per browser (NYT-style).
   useEffect(() => {
     if (loading || noPuzzle || !puzzle || !hasHelp) return;

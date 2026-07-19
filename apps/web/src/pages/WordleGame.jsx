@@ -7,7 +7,7 @@ import WordleGrid from '../components/WordleGrid.jsx';
 import Keyboard, { computeKeyStates } from '../components/Keyboard.jsx';
 import ResultModal from '../components/ResultModal.jsx';
 import EasterEggModal from '../components/EasterEggModal.jsx';
-import { decodeSolution, scoreWordle, wordleSolved, wordleHint } from '../cipher.js';
+import { decodeSolution, scoreWordle, wordleSolved, wordleHint, loadHints, saveHints } from '../cipher.js';
 
 // Compact 💡 hint control that lives in the page header next to the "?". Tapping
 // it opens a small popover with the reveal buttons + any letters already revealed.
@@ -87,7 +87,9 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
   );
   const [streak, setStreak] = useState(null);
   const [egg, setEgg] = useState(null);
-  const [hints, setHints] = useState(initialPuzzle.hints || []);
+  const [hints, setHints] = useState(() =>
+    loadHints(initialPuzzle.puzzleId, initialPuzzle.hints || [])
+  );
   const [hinting, setHinting] = useState(false);
   const [warning, setWarning] = useState(null);
 
@@ -101,6 +103,11 @@ export default function WordleGame({ puzzle: initialPuzzle, reload, headerSlot }
   const maxGuesses = puzzle?.config?.maxGuesses || 6;
 
   const hasHint = (kind) => hints.some((h) => h.kind === kind);
+
+  // Persist revealed hints per-puzzle so they survive a refresh.
+  useEffect(() => {
+    saveHints(puzzle.puzzleId, hints);
+  }, [hints, puzzle.puzzleId]);
 
   const isOver = useMemo(() => {
     const s = puzzle?.status;
