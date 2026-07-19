@@ -1,6 +1,7 @@
 package com.eightbit.leaderboard;
 
 import com.eightbit.common.security.AuthUser;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,8 +39,19 @@ public class LeaderboardController {
 
     @GetMapping("/leaderboard/batch-war")
     public Map<String, Object> batchWar(@RequestParam(defaultValue = "all") String type,
-                                        @AuthenticationPrincipal AuthUser user) {
+                                        @AuthenticationPrincipal AuthUser user,
+                                        Authentication auth) {
         int viewerYear = user == null || user.batchYear() == null ? 0 : user.batchYear();
+        // Admins/editors see every batch's standings across all years (viewerYear 0 = show all
+        // cohorts), not just their own year's cohorts.
+        if (isAdmin(auth)) viewerYear = 0;
         return service.batchWar(safeType(type), viewerYear);
+    }
+
+    /** True if the authenticated caller has an editor/admin role (authorities come from the JWT). */
+    private static boolean isAdmin(Authentication auth) {
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())
+                        || "ROLE_EDITOR".equals(a.getAuthority()));
     }
 }
