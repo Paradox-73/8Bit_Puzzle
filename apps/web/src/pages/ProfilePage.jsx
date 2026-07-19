@@ -111,8 +111,11 @@ export default function ProfilePage() {
         </div>
         <div>
           <h1 className="profile-name">{u.username || 'You'}</h1>
+          {/* TRIAL: roll number is a placeholder while the 2026 juniors have none, so it's
+              hidden. Restore `· {u.rollNumber}` when real roll numbers are issued. */}
           <p className="profile-meta">
-            {u.program} · Batch {u.batchYear} · {u.rollNumber}
+            {u.program} · Batch {u.batchYear}
+            {/* · {u.rollNumber} */}
           </p>
         </div>
       </header>

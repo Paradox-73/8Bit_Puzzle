@@ -62,13 +62,24 @@ public class AuthService {
             throw ApiException.tooManyRequests("RATE_LIMITED", "Please wait before requesting another code");
         }
         User existing = users.findByEmail(email).orElse(null);
+
+        // TRIAL GATE (disabled): during the trial only the 2026 batch may sign in. Uncomment to
+        // enforce; admins/editors are exempt so they can still manage content.
+        // if (existing != null && existing.getBatchYear() != null
+        //         && existing.getBatchYear() != TRIAL_BATCH_YEAR && !isAdmin(existing)) {
+        //     throw ApiException.unauthorized("TRIAL_2026_ONLY",
+        //             "The 8Bit trial is open to the 2026 batch only right now.");
+        // }
+
         if (existing != null) {
             if (existing.isEmailVerified()) {
-                // Verified account: roll + username must match, so nobody can hijack it.
-                String roll = rollParser.normalize(rawRoll);
+                // Verified account: username must match, so nobody can hijack it.
+                // TRIAL: the roll number is replaced by a batch dropdown, so we no longer match on
+                // roll. Original roll+username match (restore when roll numbers return):
+                // String roll = rollParser.normalize(rawRoll);
                 String username = rawUsername == null ? "" : rawUsername.trim();
-                if (!existing.getRollNumber().equalsIgnoreCase(roll)
-                        || !existing.getUsername().equalsIgnoreCase(username)) {
+                if (/* !existing.getRollNumber().equalsIgnoreCase(roll) || */
+                        !existing.getUsername().equalsIgnoreCase(username)) {
                     throw ApiException.unauthorized("BAD_DETAILS", "Those details don't match this email");
                 }
                 return startSession(existing);
@@ -82,31 +93,62 @@ public class AuthService {
 
     /** Re-validate + update an unfinished signup's details, then re-send the OTP. */
     private AuthResponse resumeUnverified(User u, String rawRoll, String rawUsername) {
-        String roll = rollParser.normalize(rawRoll);
-        RollNumberParser.Parsed parsed = rollParser.parse(roll); // validates the roll format
+        // TRIAL: rawRoll now carries the batch/programme from the dropdown, not a roll number.
+        // Original roll parsing (restore when roll numbers return):
+        // String roll = rollParser.normalize(rawRoll);
+        // RollNumberParser.Parsed parsed = rollParser.parse(roll); // validates the roll format
+        String program = normalizeBatch(rawRoll);
         String username = rawUsername == null ? "" : rawUsername.trim();
         if (!username.matches("^[A-Za-z0-9_]{3,30}$")) {
             throw ApiException.badRequest("BAD_USERNAME",
                     "Username must be 3–30 letters, numbers or underscore");
         }
         // Only clash-check against OTHER accounts (this unverified one may already hold these values).
-        if (!roll.equalsIgnoreCase(u.getRollNumber()) && users.existsByRollNumber(roll)) {
-            throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
-        }
+        // Original roll uniqueness check (restore when roll numbers return):
+        // if (!roll.equalsIgnoreCase(u.getRollNumber()) && users.existsByRollNumber(roll)) {
+        //     throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
+        // }
         if (!username.equalsIgnoreCase(u.getUsername()) && users.existsByUsernameIgnoreCase(username)) {
             throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
         }
-        u.setRollNumber(roll);
+        // u.setRollNumber(roll);  // original — keep the placeholder set at sign-up during the trial
         u.setUsername(username);
-        u.setBatchYear(parsed.batchYear());
-        u.setProgram(parsed.program());
+        u.setBatchYear(TRIAL_BATCH_YEAR);
+        u.setProgram(program);
         users.save(u);
         return startSession(u);
     }
 
+    // ----------------------------------------------------------------------------------------------
+    // TRIAL MODE — the 2026 juniors haven't been assigned roll numbers yet, so they pick their batch
+    // from a dropdown instead. Everything below is temporary; the original roll-number flow is kept
+    // (commented) throughout this class so it can be switched back on once roll numbers are issued.
+    // ----------------------------------------------------------------------------------------------
+    private static final int TRIAL_BATCH_YEAR = 2026;
+    /** Allowed batch selections — must match the Batch War cohorts in application.yml exactly. */
+    private static final java.util.Set<String> TRIAL_PROGRAMS = java.util.Set.of(
+            "iMTech CSE", "iMTech ECE", "BTech CSE", "BTech ECE", "BTech AI & DS");
+
+    /** Validate the batch the user picked and return it as the stored programme name. */
+    private String normalizeBatch(String rawBatch) {
+        String p = rawBatch == null ? "" : rawBatch.trim();
+        if (!TRIAL_PROGRAMS.contains(p)) {
+            throw ApiException.badRequest("INVALID_BATCH", "Please select your batch");
+        }
+        return p;
+    }
+
+    /** Unique, non-null filler for the (still unique + NOT NULL) roll_number column. Not shown to users. */
+    private String syntheticRoll() {
+        return "J26-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+    }
+
     private AuthResponse createAccount(String email, String rawRoll, String rawUsername) {
-        String roll = rollParser.normalize(rawRoll);
-        RollNumberParser.Parsed parsed = rollParser.parse(roll);  // validates the roll format
+        // TRIAL: rawRoll now carries the batch/programme from the dropdown, not a roll number.
+        // Original roll parsing (restore when roll numbers return):
+        // String roll = rollParser.normalize(rawRoll);
+        // RollNumberParser.Parsed parsed = rollParser.parse(roll);  // validates the roll format
+        String program = normalizeBatch(rawRoll);
         String username = rawUsername == null ? "" : rawUsername.trim();
         if (!username.matches("^[A-Za-z0-9_]{3,30}$")) {
             throw ApiException.badRequest("BAD_USERNAME",
@@ -117,18 +159,21 @@ public class AuthService {
         if (domain != null && !domain.isBlank() && !email.endsWith("@" + domain.toLowerCase())) {
             throw ApiException.badRequest("INVALID_EMAIL", "Use your @" + domain + " email");
         }
-        if (users.existsByRollNumber(roll)) {
-            throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
-        }
+        // Original roll uniqueness check (restore when roll numbers return):
+        // if (users.existsByRollNumber(roll)) {
+        //     throw ApiException.conflict("ROLL_TAKEN", "An account already exists for this roll number");
+        // }
         if (users.existsByUsernameIgnoreCase(username)) {
             throw ApiException.conflict("USERNAME_TAKEN", "That username is taken");
         }
 
         User u = new User();
-        u.setRollNumber(roll);
+        // TRIAL: roll_number is unique + NOT NULL, so fill it with a unique placeholder while the
+        // juniors have none. Original: u.setRollNumber(roll);
+        u.setRollNumber(syntheticRoll());
         u.setUsername(username);
-        u.setBatchYear(parsed.batchYear());
-        u.setProgram(parsed.program());
+        u.setBatchYear(TRIAL_BATCH_YEAR);       // original: parsed.batchYear()
+        u.setProgram(program);                  // original: parsed.program()
         u.setEmail(email);
         u.setRoles("ROLE_USER");
         u.setEmailVerified(false);  // verified by completing the OTP login

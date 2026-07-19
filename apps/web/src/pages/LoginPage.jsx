@@ -15,7 +15,11 @@ export default function LoginPage() {
 
   // We only accept @gmail.com addresses, so the user types just the handle and we append the domain.
   const [emailLocal, setEmailLocal] = useState('');
-  const [rollNumber, setRollNumber] = useState('');
+  // TRIAL: the 2026 juniors haven't been assigned roll numbers yet, so they pick their batch
+  // instead. The chosen batch rides through the existing `rollNumber` field to the backend.
+  // Original roll-number state (restore when roll numbers are issued):
+  // const [rollNumber, setRollNumber] = useState('');
+  const [batch, setBatch] = useState('');
   const [username, setUsername] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState('details'); // 'details' | 'code'
@@ -31,7 +35,8 @@ export default function LoginPage() {
     try {
       await start({
         email,
-        rollNumber: rollNumber.trim(),
+        // rollNumber: rollNumber.trim(),  // original — restore when roll numbers return
+        rollNumber: batch, // trial: the batch/programme carries the identity field for now
         username: username.trim(),
       });
       setStep('code');
@@ -89,6 +94,27 @@ export default function LoginPage() {
                 <span className="input-affix__suffix">@gmail.com</span>
               </div>
             </label>
+            {/* TRIAL: roll numbers aren't issued to the 2026 juniors yet, so collect their
+                batch instead. The original roll-number input is preserved (commented) below. */}
+            <label className="field">
+              <span className="field__label">Batch</span>
+              <select
+                className="input"
+                value={batch}
+                onChange={(e) => setBatch(e.target.value)}
+                required
+              >
+                <option value="" disabled>
+                  Select your batch
+                </option>
+                <option value="iMTech CSE">iMTech CSE</option>
+                <option value="iMTech ECE">iMTech ECE</option>
+                <option value="BTech CSE">BTech CSE</option>
+                <option value="BTech ECE">BTech ECE</option>
+                <option value="BTech AI & DS">BTech AI &amp; DS</option>
+              </select>
+            </label>
+            {/* Original roll-number field — restore when roll numbers are assigned:
             <label className="field">
               <span className="field__label">Roll Number</span>
               <input
@@ -99,6 +125,7 @@ export default function LoginPage() {
                 required
               />
             </label>
+            */}
             <label className="field">
               <span className="field__label">Username</span>
               <input
